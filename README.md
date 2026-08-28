@@ -1,19 +1,10 @@
-# Sarissa — CTF Dashboard
+# Sarissa
 
-Part of the Megdan CTF Line.
+Rapid-access CTF dashboard for digital forensics competitions. by ShadowStrike.
 
-Sarissa is a rapid-access CTF dashboard for digital forensic competitions.
+GitHub: https://github.com/ShadowStrike-CTF/sarissa
 
-> Placeholder release — full build coming soon.
+---
 
-## Megdan CTF Line
-
-| Package | Role |
-|---|---|
-| **Sarissa** | CTF dashboard |
-| **Treska** | CTF parser |
-| **Poligon** | Practice simulator |
-
-## Author
-
-GitHub: [ShadowStrike-CTF](https://github.com/ShadowStrike-CTF)
+© 2026 Strategos Pty Ltd. All rights reserved.
+Aut Viam Inveniam Aut Faciam
