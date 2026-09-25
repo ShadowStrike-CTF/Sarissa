@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<!-- Sarissa — CTF dashboard. © 2026 ShadowStrike. MIT License. Aut Viam Inveniam Aut Faciam -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sarissa</title>
+<style>
+  :root {
+    --crimson: #922b21;
+    --crimson-hi: #b83a2e;
+    --crimson-lo: #3a1512;
+    --bg: #111214;
+    --panel: #1a1b1e;
+    --panel-2: #222328;
+    --border: #2d2e34;
+    --text: #e6e6e8;
+    --muted: #9a9ca3;
+    --amber: #d4a017;
+    --green: #3f9a62;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.4 var(--sans); display: flex; flex-direction: column; }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 2px solid var(--crimson);
+  }
+  .brand { font-weight: 800; letter-spacing: .18em; color: var(--crimson-hi); font-size: 18px; }
+  .brand small { color: var(--muted); font-weight: 400; letter-spacing: 0; font-size: 12px; margin-left: 6px; }
+  .session-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+  .session-name { font-family: var(--mono); color: var(--text); background: var(--crimson-lo); padding: 3px 8px; border-radius: 4px; }
+  .saved { color: var(--muted); font-size: 12px; }
+
+  main {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: minmax(280px, 1fr) minmax(260px, .8fr) minmax(360px, 1.3fr);
+    gap: 12px; padding: 12px;
+  }
+  .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
+  @media (max-width: 1000px) {
+    main { grid-template-columns: 1fr; }
+    .col { overflow: visible; }
+  }
+
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--crimson-hi); }
+
+  input, select, textarea, button { font: inherit; color: var(--text); }
+  input, select, textarea {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; min-width: 0;
+  }
+  input:focus, select:focus, textarea:focus { outline: 1px solid var(--crimson); border-color: var(--crimson); }
+  textarea { width: 100%; resize: vertical; font-family: var(--mono); }
+  input[type=file] { padding: 4px; }
+  button {
+    background: var(--crimson); border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { background: var(--crimson-hi); }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  button.ghost:hover { border-color: var(--crimson); color: var(--text); }
+  button.ghost.active { border-color: var(--crimson); color: var(--text); background: var(--crimson-lo); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row > .grow { flex: 1; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); }
+
+  /* Challenges */
+  .tally { display: flex; gap: 16px; margin-bottom: 10px; }
+  .tally .big { font-size: 26px; font-weight: 700; color: var(--text); }
+  .tally .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .add-form { display: grid; grid-template-columns: 1fr 90px 70px auto; gap: 6px; margin-bottom: 10px; }
+  .chal { border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 4px; padding: 8px; margin-bottom: 6px; background: var(--panel-2); }
+  .chal.in_progress { border-left-color: var(--amber); }
+  .chal.solved { border-left-color: var(--green); opacity: .8; }
+  .chal .top { display: flex; gap: 8px; align-items: baseline; }
+  .chal .name { font-weight: 600; flex: 1; word-break: break-word; }
+  .chal .pts { font-family: var(--mono); color: var(--crimson-hi); }
+  .chal .meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--border); color: var(--muted); }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; }
+  .badge.unsolved { background: var(--border); }
+  .badge.in_progress { background: #4a3a0a; color: var(--amber); }
+  .badge.solved { background: #173524; color: #6fd08f; }
+  .chal .meta button { padding: 2px 8px; font-size: 12px; }
+  .chal .meta .spacer { flex: 1; }
+
+  /* Timer */
+  .clock { font-family: var(--mono); font-size: 48px; font-weight: 700; text-align: center; letter-spacing: .04em; padding: 8px 0; }
+  .clock.overtime { color: var(--crimson-hi); }
+  .clock-mode { text-align: center; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
+  .timer-set input { width: 64px; }
+
+  /* Tools */
+  .kv { display: grid; grid-template-columns: 70px 1fr auto; gap: 4px 8px; align-items: center; margin-top: 8px; }
+  .kv .k { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+  .kv .v { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+  .kv button { padding: 1px 6px; font-size: 11px; }
+  .strings-panel {
+    margin-top: 8px; max-height: 280px; overflow: auto; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 4px; font-family: var(--mono); font-size: 12px;
+  }
+  .strings-panel div { padding: 1px 8px; white-space: pre; }
+  .strings-panel div:nth-child(odd) { background: #16171a; }
+  .strings-panel .off { color: var(--muted); margin-right: 10px; }
+  .strings-panel .u16 { color: var(--amber); margin-right: 6px; }
+  .empty { color: var(--muted); padding: 8px; font-style: italic; }
+
+  #toast {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--crimson); padding: 8px 14px; border-radius: 4px; display: none; max-width: 90vw;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SARISSA<small>by ShadowStrike</small></div>
+  <div class="session-bar">
+    <span class="muted">Session</span>
+    <span class="session-name" id="sessionName">—</span>
+    <select id="sessionList" title="Saved sessions"></select>
+    <button class="ghost" id="loadSession">Load</button>
+    <input id="newSessionName" placeholder="new-session" size="14">
+    <button class="ghost" id="createSession">New</button>
+    <button id="saveSession">Save</button>
+    <span class="saved" id="savedAt"></span>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: challenges -->
+  <div class="col">
+    <section>
+      <h2>Challenges</h2>
+      <div class="tally">
+        <div><div class="big" id="tallyPoints">0 / 0</div><div class="lbl">Points</div></div>
+        <div><div class="big" id="tallySolved">0 / 0</div><div class="lbl">Solved</div></div>
+        <div><div class="big" id="tallyActive">0</div><div class="lbl">In progress</div></div>
+      </div>
+      <form class="add-form" id="addChallenge">
+        <input name="name" placeholder="Challenge name" required>
+        <input name="category" placeholder="Category">
+        <input name="points" type="number" min="0" placeholder="Pts">
+        <button type="submit">Add</button>
+      </form>
+      <div id="challengeList"></div>
+    </section>
+  </div>
+
+  <!-- CENTRE: timer -->
+  <div class="col">
+    <section>
+      <h2>Timer</h2>
+      <div class="row" style="justify-content:center">
+        <button class="ghost" data-mode="countdown">Countdown</button>
+        <button class="ghost" data-mode="elapsed">Elapsed</button>
+      </div>
+      <div class="clock" id="clock">00:00:00</div>
+      <div class="clock-mode" id="clockMode">countdown</div>
+      <div class="row timer-set" style="justify-content:center; margin-top:12px">
+        <input id="durH" type="number" min="0" placeholder="h">
+        <span>:</span>
+        <input id="durM" type="number" min="0" max="59" placeholder="m">
+        <button class="ghost" id="setDuration">Set</button>
+      </div>
+      <div class="row" style="justify-content:center; margin-top:10px">
+        <button id="startTimer">Start</button>
+        <button class="ghost" id="resetTimer">Reset</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- RIGHT: DF quick tools (all four always visible) -->
+  <div class="col">
+    <section>
+      <h2>Hash calculator</h2>
+      <textarea id="hashText" rows="2" placeholder="Text to hash…"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="hashTextBtn">Hash text</button>
+        <input type="file" id="hashFile" class="grow">
+      </div>
+      <div class="kv" id="hashOut"></div>
+    </section>
+
+    <section>
+      <h2>Timestamp converter</h2>
+      <div class="row">
+        <input id="tsValue" class="grow mono" placeholder="Timestamp value">
+        <select id="tsFormat">
+          <option value="unix">Unix (s)</option>
+          <option value="unix_ms">Unix (ms)</option>
+          <option value="filetime">Windows FILETIME</option>
+          <option value="webkit">WebKit / Chrome (µs)</option>
+          <option value="cocoa">Cocoa / Mac absolute</option>
+          <option value="hfs">HFS+</option>
+          <option value="iso">ISO 8601</option>
+        </select>
+        <button id="tsConvert">Convert</button>
+        <button class="ghost" id="tsNow">Now</button>
+      </div>
+      <div class="kv" id="tsOut"></div>
+    </section>
+
+    <section>
+      <h2>File type inspector</h2>
+      <input type="file" id="typeFile">
+      <div class="kv" id="typeOut"></div>
+    </section>
+
+    <section>
+      <h2>String extractor</h2>
+      <div class="row">
+        <input type="file" id="stringsFile" class="grow">
+        <input id="stringsFilter" placeholder="Filter (e.g. flag{)" size="16">
+      </div>
+      <div class="muted" id="stringsInfo" style="margin-top:6px; font-size:12px"></div>
+      <div class="strings-panel" id="stringsOut"><div class="empty">No file loaded.</div></div>
+    </section>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const NEXT = { unsolved: ["in_progress", "solved"], in_progress: ["solved"], solved: [] };
+const LABEL = { in_progress: "Start", solved: "Solved" };
+let session = null;
+let stringsData = [];
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+
+async function api(path, opts = {}) {
+  const init = { method: opts.method || "GET", headers: {} };
+  if (opts.json !== undefined) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(opts.json);
+  } else if (opts.body !== undefined) {
+    init.headers["Content-Type"] = "application/octet-stream";
+    init.body = opts.body; // raw bytes only — the file name is never sent
+  }
+  const res = await fetch(path, init);
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = data.detail;
+    throw new Error(Array.isArray(d) ? d.map((e) => e.msg).join("; ") : d || res.statusText);
+  }
+  return data;
+}
+
+function guard(fn) {
+  return async (...args) => { try { await fn(...args); } catch (e) { toast(e.message); } };
+}
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  for (const c of children) node.append(c);
+  return node;
+}
+
+function copyButton(text) {
+  return el("button", { className: "ghost", textContent: "copy", onclick: () => navigator.clipboard.writeText(String(text)).then(() => toast("Copied")) });
+}
+
+function renderKV(container, rows) {
+  container.replaceChildren();
+  for (const [k, v] of rows) {
+    container.append(el("div", { className: "k", textContent: k }), el("div", { className: "v", textContent: String(v) }), copyButton(v));
+  }
+}
+
+/* ---------- Session ---------- */
+async function refreshSession() {
+  session = await api("/api/session");
+  $("sessionName").textContent = session.name;
+  $("savedAt").textContent = session.last_saved ? "saved " + new Date(session.last_saved).toLocaleTimeString() : "";
+  renderTimerControls();
+}
+
+async function refreshSessionList() {
+  const { sessions, current } = await api("/api/session/list");
+  $("sessionList").replaceChildren(...sessions.map((s) => el("option", { value: s, textContent: s, selected: s === current })));
+}
+
+async function refreshAll() {
+  await refreshSession();
+  await Promise.all([refreshSessionList(), refreshChallenges()]);
+}
+
+$("loadSession").onclick = guard(async () => {
+  await api(`/api/session/${encodeURIComponent($("sessionList").value)}/load`, { method: "POST" });
+  await refreshAll();
+});
+$("createSession").onclick = guard(async () => {
+  const name = $("newSessionName").value.trim();
+  if (!name) return toast("Enter a session name");
+  await api("/api/session", { method: "POST", json: { name } });
+  $("newSessionName").value = "";
+  await refreshAll();
+});
+$("saveSession").onclick = guard(async () => {
+  await api("/api/session/save", { method: "POST" });
+  await refreshSession();
+  toast("Session saved");
+});
+
+/* ---------- Challenges ---------- */
+async function refreshChallenges() {
+  const { challenges, tally } = await api("/api/challenges");
+  $("tallyPoints").textContent = `${tally.earned} / ${tally.total}`;
+  $("tallySolved").textContent = `${tally.solved} / ${tally.count}`;
+  $("tallyActive").textContent = tally.in_progress;
+  const list = $("challengeList");
+  if (!challenges.length) {
+    list.replaceChildren(el("div", { className: "empty", textContent: "No challenges yet." }));
+    return;
+  }
+  const order = { in_progress: 0, unsolved: 1, solved: 2 };
+  const sorted = [...challenges].sort((a, b) => order[a.status] - order[b.status]);
+  list.replaceChildren(...sorted.map(renderChallenge));
+}
+
+function renderChallenge(c) {
+  const meta = el("div", { className: "meta" },
+    el("span", { className: `badge ${c.status}`, textContent: c.status.replace("_", " ") }));
+  if (c.category) meta.append(el("span", { className: "tag", textContent: c.category }));
+  meta.append(el("span", { className: "spacer" }));
+  // Forward-only: only the next statuses are ever offered.
+  for (const next of NEXT[c.status]) {
+    meta.append(el("button", { textContent: LABEL[next], onclick: guard(async () => {
+      await api(`/api/challenges/${c.id}/status`, { method: "POST", json: { status: next } });
+      await refreshChallenges();
+    }) }));
+  }
+  meta.append(el("button", { className: "ghost", textContent: "✕", title: "Delete", onclick: guard(async () => {
+    if (!confirm(`Delete "${c.name}"?`)) return;
+    await api(`/api/challenges/${c.id}`, { method: "DELETE" });
+    await refreshChallenges();
+  }) }));
+  return el("div", { className: `chal ${c.status}` },
+    el("div", { className: "top" },
+      el("span", { className: "name", textContent: c.name }),
+      el("span", { className: "pts", textContent: `${c.points} pts` })),
+    meta);
+}
+
+$("addChallenge").onsubmit = guard(async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  await api("/api/challenges", { method: "POST", json: {
+    name: f.name.value.trim(), category: f.category.value.trim(), points: Number(f.points.value || 0),
+  } });
+  f.reset();
+  f.name.focus();
+  await refreshChallenges();
+});
+
+/* ---------- Timer ---------- */
+let clockOffset = 0; // server time minus local time, ms
+
+function fmtDuration(ms) {
+  const neg = ms < 0;
+  let s = Math.floor(Math.abs(ms) / 1000);
+  const h = Math.floor(s / 3600); s %= 3600;
+  const m = Math.floor(s / 60); s %= 60;
+  return (neg ? "-" : "") + [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+function renderTimerControls() {
+  if (!session) return;
+  clockOffset = Date.parse(session.server_time) - Date.now();
+  document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("active", b.dataset.mode === session.timer.mode));
+  $("clockMode").textContent = session.timer.mode;
+  tick();
+}
+
+function tick() {
+  if (!session) return;
+  const t = session.timer;
+  const now = Date.now() + clockOffset;
+  const elapsed = t.started_at ? now - Date.parse(t.started_at) : 0;
+  const clock = $("clock");
+  if (t.mode === "elapsed") {
+    clock.textContent = fmtDuration(elapsed);
+    clock.classList.remove("overtime");
+  } else {
+    const remaining = t.duration_seconds * 1000 - elapsed;
+    clock.textContent = fmtDuration(remaining);
+    clock.classList.toggle("overtime", remaining < 0);
+  }
+}
+setInterval(tick, 250);
+
+async function updateTimer(body) {
+  session.timer = await api("/api/session/timer", { method: "PUT", json: body });
+  renderTimerControls();
+}
+document.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = guard(() => updateTimer({ mode: b.dataset.mode }))));
+$("setDuration").onclick = guard(() => updateTimer({
+  duration_seconds: (Number($("durH").value || 0) * 3600) + (Number($("durM").value || 0) * 60),
+}));
+$("startTimer").onclick = guard(() => updateTimer({ action: "start" }));
+$("resetTimer").onclick = guard(() => updateTimer({ action: "reset" }));
+
+/* ---------- Tools ---------- */
+function showHashes(h) {
+  renderKV($("hashOut"), [["MD5", h.md5], ["SHA1", h.sha1], ["SHA256", h.sha256], ["SHA512", h.sha512], ["Size", h.size + " bytes"]]);
+}
+$("hashTextBtn").onclick = guard(async () => {
+  showHashes(await api("/api/tools/hash", { method: "POST", body: new TextEncoder().encode($("hashText").value) }));
+});
+$("hashFile").onchange = guard(async (ev) => {
+  const file = ev.target.files[0];
+  if (file) showHashes(await api("/api/tools/hash", { method: "POST", body: file }));
+});
+
+$("tsConvert").onclick = guard(async () => {
+  const r = await api("/api/tools/timestamp", { method: "POST", json: { value: $("tsValue").value.trim(), format: $("tsFormat").value } });
+  renderKV($("tsOut"), [["UTC", r.human], ["ISO", r.iso], ["Unix", r.unix], ["Unix ms", r.unix_ms],
+    ["FILETIME", r.filetime], ["WebKit", r.webkit], ["Cocoa", r.cocoa], ["HFS+", r.hfs]]);
+});
+$("tsValue").onkeydown = (ev) => { if (ev.key === "Enter") $("tsConvert").click(); };
+$("tsNow").onclick = () => {
+  $("tsFormat").value = "unix";
+  $("tsValue").value = Math.floor((Date.now() + clockOffset) / 1000);
+  $("tsConvert").click();
+};
+
+$("typeFile").onchange = guard(async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const r = await api("/api/tools/filetype", { method: "POST", body: file });
+  renderKV($("typeOut"), [["MIME", r.mime], ["Type", r.description], ["Magic", r.magic_hex || "(empty)"], ["Size", r.size + " bytes"]]);
+});
+
+function renderStrings() {
+  const q = $("stringsFilter").value.toLowerCase();
+  const rows = q ? stringsData.filter((s) => s.value.toLowerCase().includes(q)) : stringsData;
+  const panel = $("stringsOut");
+  if (!rows.length) {
+    panel.replaceChildren(el("div", { className: "empty", textContent: stringsData.length ? "No matches." : "No strings found." }));
+    return;
+  }
+  panel.replaceChildren(...rows.map((s) => el("div", {},
+    el("span", { className: "off", textContent: "0x" + s.offset.toString(16).padStart(8, "0") }),
+    ...(s.encoding === "utf-16le" ? [el("span", { className: "u16", textContent: "U16" })] : []),
+    s.value)));
+}
+$("stringsFile").onchange = guard(async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const r = await api("/api/tools/strings", { method: "POST", body: file });
+  stringsData = r.strings;
+  $("stringsInfo").textContent = `${r.count} strings` + (r.truncated ? ` (showing first ${r.strings.length})` : "");
+  renderStrings();
+});
+$("stringsFilter").oninput = renderStrings;
+
+/* ---------- Boot ---------- */
+guard(refreshAll)();
+setInterval(guard(refreshSession), 15000); // picks up the 60 s auto-save timestamp
+</script>
+</body>
+</html>

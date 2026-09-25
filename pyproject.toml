@@ -10,7 +10,7 @@ name = "sarissa"
 version = "0.0.1"
 description = "Rapid-access CTF dashboard for digital forensics competitions. by ShadowStrike."
 readme = "README.md"
-license = {text = "Proprietary"}
+license = {text = "MIT"}
 authors = [
     {name = "Strategos", email = "r@strategos.au"}
 ]
@@ -19,12 +19,29 @@ classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-magic",
+    "python-magic-bin; sys_platform == 'win32'",
+    "rich",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[project.scripts]
+sarissa = "sarissa.main:main"
 
 [project.urls]
 "Source" = "https://github.com/ShadowStrike-CTF/sarissa"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sarissa"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
