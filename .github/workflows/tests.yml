@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install libmagic
+        run: sudo apt-get update && sudo apt-get install -y libmagic1
+
+      - name: Install package with test extras
+        run: pip install ".[test]"
+
+      - name: Run tests
+        run: python -m pytest -q
