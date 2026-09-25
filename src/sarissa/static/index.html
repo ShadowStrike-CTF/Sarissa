@@ -7,60 +7,73 @@
 <title>Sarissa</title>
 <style>
   :root {
+    /* Crimson design system. No green anywhere (reserved for semantic status in other Strategos tools). */
     --crimson: #922b21;
     --crimson-hi: #b83a2e;
-    --crimson-lo: #3a1512;
-    --bg: #111214;
-    --panel: #1a1b1e;
-    --panel-2: #222328;
-    --border: #2d2e34;
-    --text: #e6e6e8;
-    --muted: #9a9ca3;
-    --amber: #d4a017;
-    --green: #3f9a62;
-    --warn: #e74c3c;
+    --crimson-lo: #2a1215;
+    --warn: #e74c3c; /* timer urgency only */
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
     --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body { background: var(--bg); color: var(--text); font: 14px/1.4 var(--sans); display: flex; flex-direction: column; }
+  a { color: var(--crimson-hi); }
+  ::selection { background: var(--crimson); color: var(--text); }
 
   header {
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 10px 16px; background: var(--panel); border-bottom: 2px solid var(--crimson);
+    padding: 10px 16px; background: var(--surface); border-bottom: 2px solid var(--crimson);
   }
   .brand { font-weight: 800; letter-spacing: .18em; color: var(--crimson-hi); font-size: 18px; }
   .brand small { color: var(--muted); font-weight: 400; letter-spacing: 0; font-size: 12px; margin-left: 6px; }
   .session-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
   .session-name { font-family: var(--mono); color: var(--text); background: var(--crimson-lo); padding: 3px 8px; border-radius: 4px; }
-  .saved { color: var(--muted); font-size: 12px; }
+  /* Fixed width so "Saving…" / "Saved 14:32" swaps never shift the header. */
+  .saved { color: var(--muted); font-size: 12px; min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+  /* Cockpit: challenges ≈20% | timer ≈45% | quick tools ≈35%. Each column scrolls on its own. */
   main {
     flex: 1; min-height: 0;
-    display: grid; grid-template-columns: minmax(280px, 1fr) minmax(260px, .8fr) minmax(360px, 1.3fr);
+    display: grid;
+    grid-template-columns: minmax(240px, 20fr) minmax(320px, 45fr) minmax(380px, 35fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 12px; padding: 12px;
   }
   .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
+  .col > section { flex-shrink: 0; }
   @media (max-width: 1000px) {
-    main { grid-template-columns: 1fr; }
+    main { grid-template-columns: 1fr; grid-template-rows: none; }
     .col { overflow: visible; }
   }
 
-  section { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
   h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--crimson-hi); }
 
   input, select, textarea, button { font: inherit; color: var(--text); }
   input, select, textarea {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; min-width: 0;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; min-width: 0;
   }
   input:focus, select:focus, textarea:focus { outline: 1px solid var(--crimson); border-color: var(--crimson); }
+  button:focus-visible { outline: 2px solid var(--crimson-hi); outline-offset: 1px; }
+  input[type=file]::file-selector-button {
+    font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 8px; margin-right: 8px; cursor: pointer;
+  }
+  input[type=file]::file-selector-button:hover { border-color: var(--crimson); }
   textarea { width: 100%; resize: vertical; font-family: var(--mono); }
   input[type=file] { padding: 4px; }
   button {
     background: var(--crimson); border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
   }
-  button:hover { background: var(--crimson-hi); }
+  button:hover, button:active { background: var(--crimson-hi); }
   button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
   button.ghost:hover { border-color: var(--crimson); color: var(--text); }
   button.ghost.active { border-color: var(--crimson); color: var(--text); background: var(--crimson-lo); }
@@ -70,22 +83,26 @@
   .mono { font-family: var(--mono); }
 
   /* Challenges */
-  .tally { display: flex; gap: 16px; margin-bottom: 10px; }
+  .tally { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 10px; }
   .tally .big { font-size: 26px; font-weight: 700; color: var(--text); }
   .tally .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-  .add-form { display: grid; grid-template-columns: 1fr 90px 70px auto; gap: 6px; margin-bottom: 10px; }
-  .chal { border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 4px; padding: 8px; margin-bottom: 6px; background: var(--panel-2); }
-  .chal.in_progress { border-left-color: var(--amber); }
-  .chal.solved { border-left-color: var(--green); opacity: .8; }
+  .add-form { display: grid; grid-template-columns: 1fr 64px auto; gap: 6px; margin-bottom: 10px; }
+  .add-form input[name=name] { grid-column: 1 / -1; }
+  /* Status is readable at a glance: left-border colour + row tint, not just the badge text. */
+  .chal { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 6px; background: var(--surface-2); }
+  .chal.in_progress { border-left-color: var(--crimson-hi); background: var(--crimson-lo); }
+  .chal.solved { border-left-color: var(--muted); background: var(--surface); }
+  .chal.solved .name { color: var(--muted); font-weight: 400; }
+  .chal.solved .pts { color: var(--muted); }
   .chal .top { display: flex; gap: 8px; align-items: baseline; }
   .chal .name { font-weight: 600; flex: 1; word-break: break-word; }
   .chal .pts { font-family: var(--mono); color: var(--crimson-hi); }
   .chal .meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
   .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--border); color: var(--muted); }
   .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; }
-  .badge.unsolved { background: var(--border); }
-  .badge.in_progress { background: #4a3a0a; color: var(--amber); }
-  .badge.solved { background: #173524; color: #6fd08f; }
+  .badge.unsolved { background: var(--border); color: var(--text); }
+  .badge.in_progress { background: var(--crimson); color: var(--text); }
+  .badge.solved { background: transparent; border: 1px solid var(--border); color: var(--muted); }
   .chal .meta button { padding: 2px 8px; font-size: 12px; }
   .chal .meta .spacer { flex: 1; }
 
@@ -101,20 +118,20 @@
 
   /* Launch overlay (session picker / new session) */
   .overlay {
-    position: fixed; inset: 0; background: rgba(8, 8, 10, .82);
+    position: fixed; inset: 0; background: rgba(13, 17, 23, .85);
     display: flex; align-items: flex-start; justify-content: center; padding: 10vh 16px 16px; z-index: 10;
   }
   .overlay[hidden] { display: none; }
   .modal {
     width: min(460px, 100%); max-height: 80vh; overflow-y: auto;
-    background: var(--panel); border: 1px solid var(--crimson); border-radius: 6px; padding: 16px;
+    background: var(--surface); border: 1px solid var(--crimson); border-radius: 6px; padding: 16px;
   }
   .modal .head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
   .modal .head h2 { margin: 0; flex: 1; }
   .picker { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
   .picker button {
     display: flex; justify-content: space-between; gap: 12px; text-align: left;
-    background: var(--panel-2); border: 1px solid var(--border); padding: 8px 10px;
+    background: var(--surface-2); border: 1px solid var(--border); padding: 8px 10px;
   }
   .picker button:hover { border-color: var(--crimson); background: var(--crimson-lo); }
   .picker .when { color: var(--muted); font-size: 12px; }
@@ -123,6 +140,7 @@
   .form-error { color: var(--warn); font-size: 12px; min-height: 1.4em; margin-top: 6px; }
 
   /* Tools */
+  #tsValue { flex-basis: 100%; }
   .kv { display: grid; grid-template-columns: 70px 1fr auto; gap: 4px 8px; align-items: center; margin-top: 8px; }
   .kv .k { color: var(--muted); font-size: 12px; text-transform: uppercase; }
   .kv .v { font-family: var(--mono); font-size: 12px; word-break: break-all; }
@@ -132,9 +150,9 @@
     border: 1px solid var(--border); border-radius: 4px; font-family: var(--mono); font-size: 12px;
   }
   .strings-panel div { padding: 1px 8px; white-space: pre; }
-  .strings-panel div:nth-child(odd) { background: #16171a; }
+  .strings-panel div:nth-child(odd) { background: var(--surface); }
   .strings-panel .off { color: var(--muted); margin-right: 10px; }
-  .strings-panel .u16 { color: var(--amber); margin-right: 6px; }
+  .strings-panel .u16 { color: var(--crimson-hi); margin-right: 6px; }
   .empty { color: var(--muted); padding: 8px; font-style: italic; }
 
   #toast {
@@ -150,9 +168,9 @@
   <div class="session-bar">
     <span class="muted">Session</span>
     <span class="session-name" id="sessionName">—</span>
+    <span class="saved" id="savedAt" aria-live="polite"></span>
     <button class="ghost" id="openSessions">Sessions</button>
     <button id="saveSession">Save</button>
-    <span class="saved" id="savedAt"></span>
   </div>
 </header>
 
@@ -329,11 +347,45 @@ function renderKV(container, rows) {
 }
 
 /* ---------- Session ---------- */
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// Auto-save indicator. The 60 s auto-save loop runs server-side on its own phase, so the
+// page learns that phase from saves it didn't cause itself (manual Save, timer changes and
+// session create/load also save), then shows "Saving…" from the predicted next auto-save
+// until a session poll just after it. A failed save leaves the last successful time showing.
+let autoSavePhase = null; // server time (ms) of the last observed auto-save
+let ownSavePending = false; // the next last_saved change was caused by this page
+let saveDueTimer = null;
+
+function renderSaved(saving = false) {
+  const last = session && session.last_saved;
+  if (saving) $("savedAt").textContent = "Saving…";
+  else if (last) { const d = new Date(last); $("savedAt").textContent = `Saved ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+  else $("savedAt").textContent = "";
+}
+
+function scheduleSaveCheck() {
+  clearTimeout(saveDueTimer);
+  if (autoSavePhase === null || !session.autosave_interval) return;
+  const interval = session.autosave_interval * 1000;
+  const now = Date.now() + clockOffset;
+  const next = autoSavePhase + Math.ceil((now - autoSavePhase + 1) / interval) * interval;
+  saveDueTimer = setTimeout(() => {
+    renderSaved(true);
+    setTimeout(guard(() => refreshSession().finally(() => renderSaved())), 1500);
+  }, next - now);
+}
+
 async function refreshSession() {
+  const prev = session;
   session = await api("/api/session");
+  if (!prev || prev.name !== session.name) autoSavePhase = null;
+  else if (session.last_saved !== prev.last_saved && !ownSavePending) autoSavePhase = Date.parse(session.last_saved);
+  ownSavePending = false;
   $("sessionName").textContent = session.name;
-  $("savedAt").textContent = session.last_saved ? "saved " + new Date(session.last_saved).toLocaleTimeString() : "";
   renderTimerControls();
+  renderSaved();
+  scheduleSaveCheck();
 }
 
 async function refreshAll() {
@@ -348,8 +400,7 @@ let recentCount = 0;
 
 function fmtSaved(iso) {
   const d = new Date(iso); // rendered in local time, e.g. "25 Sep 2026, 14:32"
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 function showPicker(sessions) {
@@ -386,6 +437,7 @@ function closeLaunch() {
 }
 
 async function openSession(name) {
+  ownSavePending = true;
   await api(`/api/session/${encodeURIComponent(name)}/load`, { method: "POST" });
   await refreshAll();
   closeLaunch();
@@ -405,6 +457,7 @@ $("newSessionView").onsubmit = async (ev) => {
   const name = $("newSessionName").value.trim();
   if (!name) return;
   try {
+    ownSavePending = true;
     await api("/api/session", { method: "POST", json: { name } });
     await refreshAll();
     closeLaunch();
@@ -414,8 +467,14 @@ $("newSessionView").onsubmit = async (ev) => {
 };
 
 $("saveSession").onclick = guard(async () => {
-  await api("/api/session/save", { method: "POST" });
-  await refreshSession();
+  renderSaved(true);
+  try {
+    ownSavePending = true;
+    await api("/api/session/save", { method: "POST" });
+    await refreshSession();
+  } finally {
+    renderSaved();
+  }
   toast("Session saved");
 });
 
@@ -437,7 +496,7 @@ async function refreshChallenges() {
 
 function renderChallenge(c) {
   const meta = el("div", { className: "meta" },
-    el("span", { className: `badge ${c.status}`, textContent: c.status.replace("_", " ") }));
+    el("span", { className: `badge ${c.status}`, textContent: (c.status === "solved" ? "✓ " : "") + c.status.replace("_", " ") }));
   if (c.category) meta.append(el("span", { className: "tag", textContent: c.category }));
   meta.append(el("span", { className: "spacer" }));
   // Forward-only: only the next statuses are ever offered.
@@ -511,6 +570,7 @@ function tick() {
 setInterval(tick, 250);
 
 async function updateTimer(body) {
+  ownSavePending = true; // the server saves immediately on timer changes
   session.timer = await api("/api/session/timer", { method: "PUT", json: body });
   renderTimerControls();
 }
