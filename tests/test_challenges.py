@@ -14,6 +14,8 @@ from sarissa.main import create_app
 @pytest.fixture
 def client(tmp_path):
     with TestClient(create_app(sessions_dir=tmp_path)) as c:
+        # No session exists at launch; challenges need one.
+        assert c.post("/api/session", json={"name": "comp"}).status_code == 201
         yield c
 
 
@@ -167,6 +169,6 @@ def test_tally_not_persisted(client, tmp_path):
     cid = add(client)["id"]
     set_status(client, cid, "solved")
     client.post("/api/session/save")
-    data = json.loads((tmp_path / "default.json").read_text())
+    data = json.loads((tmp_path / "comp.json").read_text())
     assert "tally" not in data
     assert data["challenges"][0]["status"] == "solved"
