@@ -5,6 +5,7 @@ by ShadowStrike. MIT.
 ## Tech stack
 - Python 3.11
 - FastAPI + uvicorn (backend, port 7331 ALWAYS — no dynamic port)
+- httpx (runtime — loopback-only proxy to Poligon on :7333, Phase 8)
 - Vanilla HTML/CSS/JS single-file frontend
 - python-magic (magic byte detection — python-magic-bin required on Windows)
 - hashlib stdlib (MD5/SHA1/SHA256/SHA512)
@@ -105,3 +106,46 @@ Implementation notes (Phase 7 PR):
   (and `http://localhost:7331`). Until it does, the Parse tab shows a "blocking requests from
   Sarissa (CORS)" banner, distinct from the offline banner, and never uploads.
 - Treska's error body is `{"error": "..."}` (422 = not a parseable zip).
+
+## Phase 8 — Poligon Generate tab
+
+Architecture: Option B — server-side proxy. The browser calls Sarissa; Sarissa calls Poligon
+at http://127.0.0.1:7333. The browser never talks to Poligon, so no CORS surface. This is the
+only Sarissa route that talks to a sibling tool, and it is loopback-only — "no external
+network calls" still holds. Phase 7's "no Sarissa routes, browser-only" rule applies to Treska only.
+
+Tabs: header `Cockpit | Parse | Generate`. Switching tabs keeps each tab's state.
+
+Poligon contract (verified against poligon main 09cda1e):
+- `POST /api/generate {template, seed, difficulty}` → JSON `{scenario_id, template, difficulty, …, download_url}`
+  (NOT zip bytes). 400 + `{"detail": "..."}` on bad input.
+- `GET /api/download/{scenario_id}` → the challenge zip.
+- `GET /api/health` → `{"status": "ok", "port": 7333}`.
+
+Sarissa routes:
+- `GET /api/health` → `{"status": "ok"}` (G.0 gate target).
+- `POST /api/generate` — strict JSON body (pydantic, strict mode, extra forbidden):
+  template ∈ android | filesystem | evidence; seed = int (not bool/str/float); difficulty = int 1–3
+  (not bool). Non-JSON content type → 422 (blocks cross-site simple-POST CSRF).
+  Two calls to Poligon (generate, then download); returns the zip as `application/zip` with
+  `Content-Disposition: attachment; filename="<template>_<seed>_d<difficulty>.zip"`.
+  Errors: 422 invalid input · 503 Poligon offline (ConnectError) · 504 Poligon timed out ·
+  502 any other Poligon failure (non-200, bad JSON, bad scenario_id).
+- `GET /api/poligon/health` → `{"status": "online", "poligon_status": <code>, "port": 7333}` or
+  `{"status": "offline", "port": 7333}`. Always 200.
+
+Invariants (LOCKED):
+- `POLIGON_PORT = 7333` in `src/sarissa/main.py` — single constant. Never hardcoded elsewhere;
+  the frontend never contains 7333 (banner text takes the port from `/api/poligon/health`).
+- Banner states: offline / online (banner hidden) / error (Poligon answered, health not 200).
+  No CORS-blocked state — the proxy removes the CORS surface.
+- Form: template select, seed number input (default 42), difficulty select (1/2/3), Generate button.
+- "Last generated: <template> · seed <seed> · d<difficulty>" — JS variable only (no localStorage,
+  no server state); cleared on reload.
+- "Download again" = Blob URL of the last generated zip held in memory — no second Poligon call,
+  no GET generate route.
+- All DOM text via textContent. No innerHTML. No green. No animations or transitions.
+- httpx is a runtime dependency (pyproject `dependencies`). Pure Python, imported at module top,
+  so PyInstaller collects it without a hiddenimport.
+- Tests mock Poligon at the httpx transport layer (`httpx.MockTransport`) via the module-level
+  `poligon_client()` factory in `main.py` — never a live Poligon in the test suite.
