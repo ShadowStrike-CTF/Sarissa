@@ -39,11 +39,12 @@
   /* Fixed width so "Saving…" / "Saved 14:32" swaps never shift the header. */
   .saved { color: var(--muted); font-size: 12px; min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  /* Header tabs: Cockpit (the three columns) | Parse (Treska results). */
+  /* Header tabs: Cockpit (the three columns) | Parse (Treska results) | Generate (Poligon). */
   .tabs { display: flex; gap: 6px; }
   .tabs button { padding: 4px 12px; }
   /* ID-level so it beats #cockpitView's display: grid. */
   #cockpitView[hidden], #parseView[hidden] { display: none; }
+  #generateView[hidden] { display: none; }
 
   /* Cockpit: challenges ≈20% | timer ≈45% | quick tools ≈35%. Each column scrolls on its own. */
   #cockpitView {
@@ -207,6 +208,15 @@
   .entry .hash .v { white-space: nowrap; overflow-x: auto; }
   .entry .hash button { padding: 1px 6px; font-size: 11px; }
 
+  /* Generate (Poligon via Sarissa proxy). Crimson tokens only. */
+  #generateView { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+  .gen-wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .gen-form { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
+  .gen-form label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .gen-form .actions { grid-column: 1 / -1; }
+  #genLastWrap { border-left: 4px solid var(--crimson); }
+  #genLast { font-family: var(--mono); word-break: break-all; }
+
   #toast {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     background: var(--crimson); padding: 8px 14px; border-radius: 4px; display: none; max-width: 90vw;
@@ -220,6 +230,7 @@
   <nav class="tabs" role="tablist" aria-label="View">
     <button class="ghost active" id="tabCockpit" role="tab" aria-selected="true" aria-controls="cockpitView">Cockpit</button>
     <button class="ghost" id="tabParse" role="tab" aria-selected="false" aria-controls="parseView">Parse</button>
+    <button class="ghost" id="tabGenerate" role="tab" aria-selected="false" aria-controls="generateView">Generate</button>
   </nav>
   <div class="session-bar">
     <span class="muted">Session</span>
@@ -362,6 +373,45 @@
         </details>
       </section>
     </div>
+  </div>
+</main>
+
+<!-- GENERATE: Poligon challenges. The browser only talks to Sarissa; the server proxies to Poligon on loopback. -->
+<main id="generateView" role="tabpanel" aria-labelledby="tabGenerate" hidden>
+  <div class="gen-wrap">
+    <div class="banner" id="poligonBanner" role="status" hidden></div>
+
+    <section>
+      <h2>Generate a challenge</h2>
+      <form class="gen-form" id="genForm" autocomplete="off">
+        <label for="genTemplate">Template</label>
+        <select id="genTemplate">
+          <option value="android">android</option>
+          <option value="filesystem">filesystem</option>
+          <option value="evidence">evidence</option>
+        </select>
+        <label for="genSeed">Seed</label>
+        <input id="genSeed" class="mono" type="number" step="1" value="42" required>
+        <label for="genDifficulty">Difficulty</label>
+        <select id="genDifficulty">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+        <div class="row actions">
+          <button type="submit" id="genSubmit">Generate</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="banner" id="genError" role="alert" hidden></div>
+
+    <section id="genLastWrap" hidden>
+      <div class="row">
+        <span class="grow" id="genLast"></span>
+        <a id="genAgain" href="#">Download again</a>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -767,18 +817,19 @@ const DASH = "—";
 const orDash = (v) => (v === null || v === undefined || v === "") ? DASH : String(v);
 let parseResult = null;
 
+const TABS = { cockpit: ["tabCockpit", "cockpitView"], parse: ["tabParse", "parseView"], generate: ["tabGenerate", "generateView"] };
+
 function showTab(name) {
-  const parse = name === "parse";
-  $("cockpitView").hidden = parse;
-  $("parseView").hidden = !parse;
-  $("tabCockpit").classList.toggle("active", !parse);
-  $("tabParse").classList.toggle("active", parse);
-  $("tabCockpit").setAttribute("aria-selected", String(!parse));
-  $("tabParse").setAttribute("aria-selected", String(parse));
-  if (parse) treskaStatus();
+  for (const [key, [tab, view]] of Object.entries(TABS)) {
+    const on = key === name;
+    $(view).hidden = !on;
+    $(tab).classList.toggle("active", on);
+    $(tab).setAttribute("aria-selected", String(on));
+  }
+  if (name === "parse") treskaStatus();
+  if (name === "generate") guard(poligonStatus)();
 }
-$("tabCockpit").onclick = () => showTab("cockpit");
-$("tabParse").onclick = () => showTab("parse");
+for (const [key, [tab]] of Object.entries(TABS)) $(tab).onclick = () => showTab(key);
 
 // "online" | "blocked" | "offline". A CORS failure and a dead port both reject fetch();
 // an opaque no-cors probe still resolves when something is listening, which tells them apart.
@@ -922,6 +973,82 @@ $("parseDrop").addEventListener("drop", (e) => parseUpload(e.dataTransfer.files[
 // On the Parse tab, a stray drop outside the zone must not navigate away from the results.
 // Scoped to that tab so dropping onto the cockpit's file inputs keeps working.
 for (const ev of ["dragover", "drop"]) window.addEventListener(ev, (e) => { if (!$("parseView").hidden) e.preventDefault(); });
+
+/* ---------- Generate (Poligon) ---------- */
+// Browser-to-Sarissa only: the server proxies to Poligon on loopback, so no CORS state here.
+// The Poligon port comes from /api/poligon/health — Python holds the one constant.
+// lastGenerated lives in this variable only (no browser storage, no server state): gone on reload.
+let lastGenerated = null;
+
+async function poligonStatus() {
+  const h = await api("/api/poligon/health");
+  let state = "offline";
+  if (h.status === "online") state = h.poligon_status === 200 ? "online" : "error";
+  const banner = $("poligonBanner");
+  banner.textContent = {
+    offline: `Poligon not running on :${h.port} — start it with python -m poligon`,
+    error: `Poligon on :${h.port} responded HTTP ${h.poligon_status} to its health check`,
+  }[state] || "";
+  banner.hidden = state === "online";
+  return state;
+}
+
+function showGenError(title, detail) {
+  $("genError").replaceChildren(el("b", { textContent: title }), " " + detail);
+  $("genError").hidden = false;
+}
+
+function saveZip(url, filename) {
+  const a = el("a", { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+$("genForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  if ($("genSubmit").disabled) return;
+  const template = $("genTemplate").value;
+  const difficulty = Number($("genDifficulty").value);
+  const seed = Number($("genSeed").value);
+  $("genError").hidden = true;
+  if ($("genSeed").value.trim() === "" || !Number.isSafeInteger(seed)) {
+    showGenError("Invalid seed:", "use a whole number.");
+    return;
+  }
+  $("genSubmit").disabled = true;
+  $("genSubmit").textContent = "Generating…";
+  try {
+    let res;
+    try {
+      res = await fetch("/api/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template, seed, difficulty }),
+      });
+    } catch (_) {
+      showGenError("Network error:", "Sarissa did not answer.");
+      return;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const d = data.detail;
+      showGenError("Generate failed:", Array.isArray(d) ? d.map((e) => e.msg).join("; ") : String(d || `HTTP ${res.status}`));
+      if (res.status === 503) await guard(poligonStatus)();
+      return;
+    }
+    const blob = await res.blob();
+    if (lastGenerated) URL.revokeObjectURL(lastGenerated.url);
+    const filename = `${template}_${seed}_d${difficulty}.zip`;
+    lastGenerated = { template, seed, difficulty, filename, url: URL.createObjectURL(blob) };
+    saveZip(lastGenerated.url, filename);
+    $("genLast").textContent = `Last generated: ${template} · seed ${seed} · d${difficulty}`;
+    $("genAgain").href = lastGenerated.url;
+    $("genAgain").download = filename;
+    $("genLastWrap").hidden = false;
+  } finally {
+    $("genSubmit").disabled = false;
+    $("genSubmit").textContent = "Generate";
+  }
+};
 
 /* ---------- Boot ---------- */
 guard(async () => {

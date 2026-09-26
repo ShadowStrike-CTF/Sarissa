@@ -11,14 +11,17 @@ import asyncio
 import contextlib
 import sys
 import threading
+import uuid
 import webbrowser
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Annotated, AsyncIterator, Literal
 
+import httpx
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from rich.console import Console
 
 from sarissa.api import challenges, session, tools
@@ -26,6 +29,49 @@ from sarissa.api import challenges, session, tools
 PORT = 7331  # ALWAYS — no config, no fallback
 HOST = "127.0.0.1"
 URL = f"http://{HOST}:{PORT}"
+
+# Poligon (challenge generator). Loopback only — the Generate tab's one outbound hop.
+POLIGON_PORT = 7333
+POLIGON_URL = f"http://{HOST}:{POLIGON_PORT}"
+GENERATE_TIMEOUT = 30.0
+HEALTH_TIMEOUT = 2.0
+
+
+def poligon_client(timeout: float) -> httpx.AsyncClient:
+    # Looked up at call time, so tests can swap in an httpx.MockTransport.
+    return httpx.AsyncClient(base_url=POLIGON_URL, timeout=timeout)
+
+
+class GenerateRequest(BaseModel):
+    # Strict: rejects true/"42"/4.0 — bool would otherwise pass as an int.
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    template: Literal["android", "filesystem", "evidence"]
+    seed: StrictInt
+    difficulty: Annotated[StrictInt, Field(ge=1, le=3)]
+
+
+async def fetch_challenge(req: GenerateRequest) -> bytes:
+    """Poligon generates (JSON with scenario_id), then serves the zip separately."""
+    try:
+        async with poligon_client(GENERATE_TIMEOUT) as client:
+            gen = await client.post("/api/generate", json=req.model_dump())
+            if gen.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Poligon error: generate returned HTTP {gen.status_code}")
+            try:
+                scenario_id = str(uuid.UUID(str(gen.json()["scenario_id"])))
+            except (ValueError, KeyError, TypeError):
+                raise HTTPException(status_code=502, detail="Poligon error: no scenario id in response") from None
+            dl = await client.get(f"/api/download/{scenario_id}")
+            if dl.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Poligon error: download returned HTTP {dl.status_code}")
+            return dl.content
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Poligon offline") from None
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Poligon timed out") from None
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Poligon error: {type(exc).__name__}") from None
 
 
 def static_dir() -> Path:
@@ -64,6 +110,30 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(static_dir() / "index.html")
+
+    @app.get("/api/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
+    @app.post("/api/generate")
+    async def generate_challenge(req: GenerateRequest) -> Response:
+        """Proxy a generate request to Poligon and return the challenge zip."""
+        content = await fetch_challenge(req)
+        filename = f"{req.template}_{req.seed}_d{req.difficulty}.zip"
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/poligon/health")
+    async def poligon_health() -> dict:
+        try:
+            async with poligon_client(HEALTH_TIMEOUT) as client:
+                resp = await client.get("/api/health")
+        except httpx.HTTPError:
+            return {"status": "offline", "port": POLIGON_PORT}
+        return {"status": "online", "poligon_status": resp.status_code, "port": POLIGON_PORT}
 
     return app
 
