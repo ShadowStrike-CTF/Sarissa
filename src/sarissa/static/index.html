@@ -7,7 +7,7 @@
 <title>Sarissa</title>
 <style>
   :root {
-    /* Crimson design system. No green anywhere (reserved for semantic status in other Strategos tools). */
+    /* Crimson design system. No semantic success colour anywhere (reserved for status in other Strategos tools). */
     --crimson: #922b21;
     --crimson-hi: #b83a2e;
     --crimson-lo: #2a1215;
@@ -39,8 +39,14 @@
   /* Fixed width so "Saving…" / "Saved 14:32" swaps never shift the header. */
   .saved { color: var(--muted); font-size: 12px; min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+  /* Header tabs: Cockpit (the three columns) | Parse (Treska results). */
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { padding: 4px 12px; }
+  /* ID-level so it beats #cockpitView's display: grid. */
+  #cockpitView[hidden], #parseView[hidden] { display: none; }
+
   /* Cockpit: challenges ≈20% | timer ≈45% | quick tools ≈35%. Each column scrolls on its own. */
-  main {
+  #cockpitView {
     flex: 1; min-height: 0;
     display: grid;
     grid-template-columns: minmax(240px, 20fr) minmax(320px, 45fr) minmax(380px, 35fr);
@@ -50,7 +56,7 @@
   .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
   .col > section { flex-shrink: 0; }
   @media (max-width: 1000px) {
-    main { grid-template-columns: 1fr; grid-template-rows: none; }
+    #cockpitView { grid-template-columns: 1fr; grid-template-rows: none; }
     .col { overflow: visible; }
   }
 
@@ -155,6 +161,52 @@
   .strings-panel .u16 { color: var(--crimson-hi); margin-right: 6px; }
   .empty { color: var(--muted); padding: 8px; font-style: italic; }
 
+  /* Parse (Treska on :7332). Crimson tokens only — never --warn, which is Treska's own red. */
+  #parseView { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+  .parse-wrap, #parseResults:not([hidden]) { display: flex; flex-direction: column; gap: 12px; }
+  .parse-wrap { max-width: 1100px; margin: 0 auto; }
+  .banner { border: 1px solid var(--crimson); border-left-width: 4px; border-radius: 4px; background: var(--crimson-lo); padding: 10px 12px; }
+  .banner b { color: var(--crimson-hi); }
+  #parseDrop {
+    display: block; border: 2px dashed var(--border); border-radius: 6px; background: var(--surface);
+    padding: 32px 16px; text-align: center; cursor: pointer;
+  }
+  #parseDrop:hover, #parseDrop:focus-within, #parseDrop.over { border-color: var(--crimson); background: var(--crimson-lo); }
+  #parseDrop.busy { cursor: progress; opacity: .7; }
+  #parseDrop strong { display: block; font-size: 16px; margin-bottom: 4px; }
+  #parseDrop small { color: var(--muted); }
+  #parseFile { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .parse-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+  .parse-summary .zip { font-family: var(--mono); font-weight: 600; font-size: 15px; word-break: break-all; flex: 1 1 100%; }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat.hot b { color: var(--crimson-hi); }
+  .parse-summary button { margin-left: auto; }
+  .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 4px; }
+  .ptable { width: 100%; border-collapse: collapse; }
+  .ptable th, .ptable td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ptable th { background: var(--surface-2); color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .ptable tr:last-child td { border-bottom: 0; }
+  .ptable td.path { font-family: var(--mono); font-size: 12px; word-break: break-all; min-width: 240px; }
+  .ptable td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ptable .tag, .ptable .badge, .entry .tag, .entry .badge { display: inline-block; margin: 0 4px 4px 0; }
+  .badge.mismatch { background: var(--crimson); color: var(--text); font-weight: 700; }
+  .sqlite { background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; margin-bottom: 6px; }
+  .sqlite .file { font-family: var(--mono); font-weight: 600; word-break: break-all; }
+  .sqlite ul { margin: 6px 0 0; padding-left: 20px; }
+  .sqlite li { font-family: var(--mono); font-size: 12px; }
+  details summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--crimson-hi); font-weight: 700; }
+  details summary:focus-visible { outline: 1px solid var(--crimson); outline-offset: 2px; }
+  details .scroll { margin-top: 10px; }
+  .entry { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .entry:last-child { border-bottom: 0; }
+  .entry .p { font-family: var(--mono); font-weight: 600; word-break: break-all; }
+  .entry .meta { color: var(--muted); font-size: 12px; }
+  .entry .hash { display: flex; gap: 8px; align-items: center; font-family: var(--mono); font-size: 12px; }
+  .entry .hash .k { color: var(--muted); width: 56px; flex-shrink: 0; text-transform: uppercase; }
+  .entry .hash .v { white-space: nowrap; overflow-x: auto; }
+  .entry .hash button { padding: 1px 6px; font-size: 11px; }
+
   #toast {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     background: var(--crimson); padding: 8px 14px; border-radius: 4px; display: none; max-width: 90vw;
@@ -165,6 +217,10 @@
 
 <header>
   <div class="brand">SARISSA<small>by ShadowStrike</small></div>
+  <nav class="tabs" role="tablist" aria-label="View">
+    <button class="ghost active" id="tabCockpit" role="tab" aria-selected="true" aria-controls="cockpitView">Cockpit</button>
+    <button class="ghost" id="tabParse" role="tab" aria-selected="false" aria-controls="parseView">Parse</button>
+  </nav>
   <div class="session-bar">
     <span class="muted">Session</span>
     <span class="session-name" id="sessionName">—</span>
@@ -174,7 +230,7 @@
   </div>
 </header>
 
-<main>
+<main id="cockpitView" role="tabpanel" aria-labelledby="tabCockpit">
   <!-- LEFT: challenges -->
   <div class="col">
     <section>
@@ -262,6 +318,50 @@
       <div class="muted" id="stringsInfo" style="margin-top:6px; font-size:12px"></div>
       <div class="strings-panel" id="stringsOut"><div class="empty">No file loaded.</div></div>
     </section>
+  </div>
+</main>
+
+<!-- PARSE: Treska results. The browser talks to Treska on :7332 directly; the Sarissa server is never involved. -->
+<main id="parseView" role="tabpanel" aria-labelledby="tabParse" hidden>
+  <div class="parse-wrap">
+    <div class="banner" id="treskaBanner" role="status" hidden></div>
+
+    <label id="parseDrop" for="parseFile">
+      <input id="parseFile" type="file" accept=".zip,application/zip">
+      <strong id="parseDropTitle">Drop a .zip here</strong>
+      <small>or click to browse — parsed by Treska on this machine, nothing leaves it</small>
+    </label>
+
+    <div class="banner" id="parseError" role="alert" hidden></div>
+
+    <div id="parseResults" hidden>
+      <section class="parse-summary">
+        <div class="zip" id="pZip"></div>
+        <span class="stat"><b id="pFiles"></b> files</span>
+        <span class="stat" id="pFlaggedWrap"><b id="pFlagged"></b> flagged</span>
+        <span class="stat"><b id="pSqlite"></b> SQLite</span>
+        <span class="stat" id="pMismatchWrap"><b id="pMismatch"></b> magic mismatch</span>
+        <span class="muted mono" id="pSchema"></span>
+        <button type="button" id="parseExport">Export JSON</button>
+      </section>
+
+      <section>
+        <h2>Flagged files <span class="muted" id="pFlaggedCount"></span></h2>
+        <div id="pFlaggedOut"></div>
+      </section>
+
+      <section>
+        <h2>SQLite schemas <span class="muted" id="pSqliteCount"></span></h2>
+        <div id="pSqliteOut"></div>
+      </section>
+
+      <section>
+        <details id="pInventoryWrap">
+          <summary>Full inventory <span class="muted" id="pInventoryCount"></span></summary>
+          <div class="scroll" id="pInventoryOut"></div>
+        </details>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -506,11 +606,20 @@ function renderChallenge(c) {
       await refreshChallenges();
     }) }));
   }
-  meta.append(el("button", { className: "ghost", textContent: "✕", title: "Delete", onclick: guard(async () => {
-    if (!confirm(`Delete "${c.name}"?`)) return;
+  // Two-click delete: the first click arms the button for 3 s, the second deletes. No browser dialogs.
+  const del = el("button", { className: "ghost", textContent: "✕", title: "Delete" });
+  del.onclick = guard(async () => {
+    if (!del.dataset.armed) {
+      del.dataset.armed = "1";
+      del.textContent = "Delete?";
+      del.classList.add("active");
+      setTimeout(() => { delete del.dataset.armed; del.textContent = "✕"; del.classList.remove("active"); }, 3000);
+      return;
+    }
     await api(`/api/challenges/${c.id}`, { method: "DELETE" });
     await refreshChallenges();
-  }) }));
+  });
+  meta.append(del);
   return el("div", { className: `chal ${c.status}` },
     el("div", { className: "top" },
       el("span", { className: "name", textContent: c.name }),
@@ -645,6 +754,174 @@ $("stringsFile").onchange = guard(async (ev) => {
   renderStrings();
 });
 $("stringsFilter").oninput = renderStrings;
+
+/* ---------- Parse (Treska) ---------- */
+// Browser-to-Treska only: the Sarissa server never proxies, imports or calls Treska.
+// Every value from Treska goes in via textContent (el/append): CTF zips carry hostile filenames.
+const TRESKA = "http://localhost:7332";
+const TRESKA_STATE = {
+  offline: "Treska not running on :7332 — start it with python -m treska",
+  blocked: "Treska is running on :7332 but blocking requests from Sarissa (CORS) — update Treska",
+};
+const DASH = "—";
+const orDash = (v) => (v === null || v === undefined || v === "") ? DASH : String(v);
+let parseResult = null;
+
+function showTab(name) {
+  const parse = name === "parse";
+  $("cockpitView").hidden = parse;
+  $("parseView").hidden = !parse;
+  $("tabCockpit").classList.toggle("active", !parse);
+  $("tabParse").classList.toggle("active", parse);
+  $("tabCockpit").setAttribute("aria-selected", String(!parse));
+  $("tabParse").setAttribute("aria-selected", String(parse));
+  if (parse) treskaStatus();
+}
+$("tabCockpit").onclick = () => showTab("cockpit");
+$("tabParse").onclick = () => showTab("parse");
+
+// "online" | "blocked" | "offline". A CORS failure and a dead port both reject fetch();
+// an opaque no-cors probe still resolves when something is listening, which tells them apart.
+async function treskaStatus() {
+  let state = "offline";
+  try {
+    const res = await fetch(TRESKA + "/api/health", { cache: "no-store" });
+    if (res.ok) state = "online";
+  } catch (_) {
+    try {
+      await fetch(TRESKA + "/api/health", { mode: "no-cors", cache: "no-store" });
+      state = "blocked";
+    } catch (_) { /* nothing listening on :7332 */ }
+  }
+  const banner = $("treskaBanner");
+  banner.textContent = TRESKA_STATE[state] || "";
+  banner.hidden = state === "online";
+  return state;
+}
+
+function showParseError(title, detail) {
+  $("parseError").replaceChildren(el("b", { textContent: title }), " " + detail);
+  $("parseError").hidden = false;
+}
+
+function setParseBusy(busy, name) {
+  $("parseDrop").classList.toggle("busy", busy);
+  $("parseFile").disabled = busy;
+  $("parseDropTitle").textContent = busy ? `Parsing ${name}…` : "Drop a .zip here";
+}
+
+async function parseUpload(file) {
+  if (!file || $("parseFile").disabled) return;
+  $("parseError").hidden = true;
+  setParseBusy(true, file.name);
+  try {
+    // Only send when Treska will let us read the answer — otherwise it parses for nothing.
+    if (await treskaStatus() !== "online") return;
+    const body = new FormData();
+    body.append("file", file, file.name);
+    let res;
+    try {
+      res = await fetch(TRESKA + "/api/parse", { method: "POST", body });
+    } catch (_) {
+      if (await treskaStatus() === "online") showParseError("Network error:", "the upload to Treska failed.");
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = data && typeof data.error === "string" ? data.error : `HTTP ${res.status}`;
+      showParseError(res.status === 422 ? "Could not parse this file:" : "Treska error:", msg);
+      return;
+    }
+    parseResult = data;
+    renderParse(data);
+  } finally {
+    setParseBusy(false);
+    $("parseFile").value = "";
+  }
+}
+
+function flagChips(e) {
+  const chips = [];
+  if (e.mismatch) chips.push(el("span", { className: "badge mismatch", textContent: "mismatch" }));
+  for (const f of e.flags) chips.push(el("span", { className: "tag", textContent: f }));
+  return chips;
+}
+
+function renderParse(r) {
+  const sqlite = r.inventory.filter((e) => e.sqlite_schema);
+  const mismatches = r.inventory.filter((e) => e.mismatch).length;
+  $("pZip").textContent = r.zip_path;
+  $("pFiles").textContent = r.file_count;
+  $("pFlagged").textContent = r.flagged.length;
+  $("pSqlite").textContent = sqlite.length;
+  $("pMismatch").textContent = mismatches;
+  $("pSchema").textContent = `schema ${r.schema_version}`;
+  $("pFlaggedWrap").classList.toggle("hot", r.flagged.length > 0);
+  $("pMismatchWrap").classList.toggle("hot", mismatches > 0);
+
+  $("pFlaggedCount").textContent = `(${r.flagged.length})`;
+  if (!r.flagged.length) {
+    $("pFlaggedOut").replaceChildren(el("div", { className: "empty", textContent: "No flagged files." }));
+  } else {
+    const head = el("tr", {}, ...["Path", "Flags", "Size", "Magic type"].map((h) => el("th", { textContent: h })));
+    const rows = r.flagged.map((e) => el("tr", {},
+      el("td", { className: "path", textContent: e.path }),
+      el("td", {}, ...flagChips(e)),
+      el("td", { className: "num", textContent: Number(e.size_bytes).toLocaleString() }),
+      el("td", { textContent: orDash(e.magic_type) })));
+    $("pFlaggedOut").replaceChildren(el("div", { className: "scroll" },
+      el("table", { className: "ptable" }, el("thead", {}, head), el("tbody", {}, ...rows))));
+  }
+
+  $("pSqliteCount").textContent = `(${sqlite.length})`;
+  if (!sqlite.length) {
+    $("pSqliteOut").replaceChildren(el("div", { className: "empty", textContent: "No SQLite databases." }));
+  } else {
+    $("pSqliteOut").replaceChildren(...sqlite.map((e) => {
+      const tables = e.sqlite_schema.tables || [];
+      const list = tables.length
+        ? el("ul", {}, ...tables.map((t) => {
+            const cols = (t.columns || []).map((c) => `${c.name} ${c.type || ""}`.trim()).join(", ");
+            return el("li", {}, String(t.name), el("span", { className: "muted", textContent: ` (${cols})` }));
+          }))
+        : el("div", { className: "muted", textContent: "(no tables)" });
+      return el("div", { className: "sqlite" }, el("div", { className: "file", textContent: e.path }), list);
+    }));
+  }
+
+  $("pInventoryCount").textContent = `(${r.inventory.length})`;
+  const hashRow = (label, v) => el("div", { className: "hash" },
+    el("span", { className: "k", textContent: label }),
+    el("span", { className: "v", textContent: orDash(v) }),
+    ...(v ? [copyButton(v)] : []));
+  $("pInventoryOut").replaceChildren(...r.inventory.map((e) => el("div", { className: "entry" },
+    el("div", { className: "p" }, `${e.path} `, ...flagChips(e)),
+    el("div", { className: "meta", textContent: `size ${Number(e.size_bytes).toLocaleString()} · ext ${orDash(e.extension)}`
+      + ` · zip ${orDash(e.zip_timestamp)} · ${orDash(e.mime)} · ${orDash(e.magic_type)}` }),
+    hashRow("MD5", e.md5),
+    hashRow("SHA256", e.sha256))));
+
+  $("parseResults").hidden = false;
+}
+
+$("parseExport").onclick = () => {
+  if (!parseResult) return;
+  const blob = new Blob([JSON.stringify(parseResult, null, 2) + "\n"], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: String(parseResult.zip_path).replace(/\.zip$/i, "") + ".treska.json" });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+$("parseFile").onchange = () => parseUpload($("parseFile").files[0]);
+for (const ev of ["dragenter", "dragover"]) $("parseDrop").addEventListener(ev, (e) => { e.preventDefault(); $("parseDrop").classList.add("over"); });
+for (const ev of ["dragleave", "drop"]) $("parseDrop").addEventListener(ev, (e) => { e.preventDefault(); $("parseDrop").classList.remove("over"); });
+$("parseDrop").addEventListener("drop", (e) => parseUpload(e.dataTransfer.files[0]));
+// On the Parse tab, a stray drop outside the zone must not navigate away from the results.
+// Scoped to that tab so dropping onto the cockpit's file inputs keeps working.
+for (const ev of ["dragover", "drop"]) window.addEventListener(ev, (e) => { if (!$("parseView").hidden) e.preventDefault(); });
 
 /* ---------- Boot ---------- */
 guard(async () => {

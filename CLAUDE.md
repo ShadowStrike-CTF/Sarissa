@@ -14,7 +14,7 @@ by ShadowStrike. MIT.
 ## Architecture
 Named sessions per competition. Auto-save every 60 seconds.
 Four DF quick tools: hash calculator, timestamp converter, file type inspector,
-string extractor. All four always visible — no navigation required.
+string extractor. All four always visible on the Cockpit tab — no navigation required.
 Challenge status is ONE-WAY: unsolved → in_progress → solved. No reversing via API.
 Timer: countdown (primary) + elapsed toggle. Both modes always available.
 
@@ -95,3 +95,13 @@ No alert/confirm/prompt. No innerHTML with data. No green.
 New routes on Sarissa server: none. The fetch is browser-to-Treska only.
 New tests: web tests for the new tab rendering (TestClient). No mocking
 of the Treska API — test the Sarissa-side HTML/JS only.
+
+Implementation notes (Phase 7 PR):
+- Tabs: header `Cockpit | Parse`. Cockpit = the three columns (challenges, timer, all four tools).
+  Parse swaps them out; switching back is one click and keeps the parse results.
+- Single Treska URL constant: `TRESKA` in `src/sarissa/static/index.html`. No Python in
+  `src/sarissa/` references Treska.
+- CORS dependency: Treska must send `Access-Control-Allow-Origin` for `http://127.0.0.1:7331`
+  (and `http://localhost:7331`). Until it does, the Parse tab shows a "blocking requests from
+  Sarissa (CORS)" banner, distinct from the offline banner, and never uploads.
+- Treska's error body is `{"error": "..."}` (422 = not a parseable zip).
