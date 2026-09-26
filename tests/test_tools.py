@@ -191,7 +191,9 @@ def test_ui_has_no_min_length_control(client):
 
 def test_ui_makes_no_external_calls(client):
     html = client.get("/").text
-    assert re.search(r"https?://", html) is None
+    # The only URL allowed is Treska on loopback (Phase 7 Parse tab) — never an external host.
+    urls = set(re.findall(r"https?://[^\s\"'`<>)]*", html))
+    assert urls == {"http://localhost:7332"}
 
 
 def test_swagger_docs_disabled(client):
