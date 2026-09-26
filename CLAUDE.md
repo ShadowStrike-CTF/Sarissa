@@ -70,3 +70,28 @@ pyinstaller sarissa.spec --clean
 ```
 (`pip install .` pulls in the runtime deps — fastapi, uvicorn, rich — that PyInstaller bundles.)
 Output: `dist/sarissa.exe`
+
+## Phase 7 — Treska integration panel
+
+Architecture: Option A — browser fetch. The Sarissa frontend fetches
+directly from Treska's API at http://localhost:7332. No server-to-server
+calls. No import of treska code. No packaging dependency on Treska.
+
+Panel: new "Parse" tab in Sarissa alongside the existing session/tools tabs.
+Name: "Parse" (matches Treska's verb — parse a zip).
+
+Layout:
+- Drop zone: same drag-drop pattern as Treska's own UI (zip upload)
+- On upload: browser POSTs to http://localhost:7332/api/parse
+- Results: flagged files table, SQLite schemas, full inventory (collapsible)
+- Treska offline: show inline banner "Treska not running on :7332 —
+  start it with python -m treska" — not an error, just a state
+- Export JSON button (client-side Blob download)
+
+Tokens: Sarissa crimson (#922b21) throughout. Do NOT use Treska mid-red (#e74c3c).
+All DOM text via textContent — CTF zip filenames can be hostile.
+No alert/confirm/prompt. No innerHTML with data. No green.
+
+New routes on Sarissa server: none. The fetch is browser-to-Treska only.
+New tests: web tests for the new tab rendering (TestClient). No mocking
+of the Treska API — test the Sarissa-side HTML/JS only.
