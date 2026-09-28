@@ -149,3 +149,28 @@ Invariants (LOCKED):
   so PyInstaller collects it without a hiddenimport.
 - Tests mock Poligon at the httpx transport layer (`httpx.MockTransport`) via the module-level
   `poligon_client()` factory in `main.py` — never a live Poligon in the test suite.
+
+## Phase 9 — Session export
+
+Route: `GET /api/export` (in `create_app()`, `main.py`). Read-only — does not save.
+Returns the active session as `application/json` with
+`Content-Disposition: attachment; filename="sarissa-<name>-<YYYYMMDD>.json"` (UTC date; session
+names are already restricted to `[A-Za-z0-9_-]`). No active session → 409 via the app-wide
+`NoActiveSession` handler (same as every other session route — not 404).
+
+Schema v1.0 (Zapis Phase 6 ingestion):
+```
+{
+  "schema_version": "1.0",
+  "tool": "Sarissa",
+  "session": {"name", "created_at", "updated_at", "exported_at", "timer": {mode, duration_seconds, started_at}},
+  "challenges": [ ...challenge objects as stored, incl. per-challenge notes... ]
+}
+```
+
+Invariants:
+- Export only what the session actually stores — never fabricate or default fields.
+- The four quick tools are stateless (results go to the browser, never into the session), so
+  v1.0 has no `results` key. Adding one needs the tools to persist results first → schema bump.
+- Frontend: `Export JSON` button + `#exportStatus` span in the header session bar (visible on every
+  tab). Blob download; errors shown inline via textContent. No alert/confirm/prompt, no innerHTML.
