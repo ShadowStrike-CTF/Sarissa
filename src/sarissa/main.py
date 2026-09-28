@@ -9,11 +9,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import json
 import sys
 import threading
 import uuid
 import webbrowser
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, AsyncIterator, Literal
 
@@ -114,6 +116,34 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/export")
+    def export_session() -> Response:
+        """Export the active session as versioned JSON (schema v1.0, Zapis-compatible).
+
+        Only data the session actually holds is exported; tool results are stateless and absent.
+        No active session → NoActiveSession → 409, like every other session route.
+        """
+        data = manager.require_current()
+        payload = {
+            "schema_version": "1.0",
+            "tool": "Sarissa",
+            "session": {
+                "name": data["name"],
+                "created_at": data["created_at"],
+                "updated_at": data["updated_at"],
+                "exported_at": session.utc_now(),
+                "timer": data["timer"],
+            },
+            "challenges": data["challenges"],
+        }
+        # Session names are restricted to [A-Za-z0-9_-], so the filename needs no escaping.
+        filename = f"sarissa-{data['name']}-{datetime.now(timezone.utc):%Y%m%d}.json"
+        return Response(
+            content=json.dumps(payload, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.post("/api/generate")
     async def generate_challenge(req: GenerateRequest) -> Response:
