@@ -238,6 +238,8 @@
     <span class="saved" id="savedAt" aria-live="polite"></span>
     <button class="ghost" id="openSessions">Sessions</button>
     <button id="saveSession">Save</button>
+    <button class="ghost" id="exportSession">Export JSON</button>
+    <span class="saved" id="exportStatus" aria-live="polite"></span>
   </div>
 </header>
 
@@ -627,6 +629,25 @@ $("saveSession").onclick = guard(async () => {
   }
   toast("Session saved");
 });
+
+async function exportSession() {
+  $("exportStatus").textContent = "";
+  const resp = await fetch("/api/export");
+  if (!resp.ok) {
+    // Inline status only, no dialogs. 409 = no active session.
+    $("exportStatus").textContent = resp.status === 409 ? "Export failed: no active session." : `Export failed (${resp.status})`;
+    return;
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const name = resp.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "sarissa-export.json";
+  const a = el("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$("exportSession").onclick = guard(exportSession);
 
 /* ---------- Challenges ---------- */
 async function refreshChallenges() {
