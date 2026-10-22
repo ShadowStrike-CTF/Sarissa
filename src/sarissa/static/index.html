@@ -5,6 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sarissa</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB4PSI0NSIgeT0iNiIgd2lkdGg9IjEwIiBoZWlnaHQ9IjIwIiByeD0iMyIgZmlsbD0iIzRhMmMxNyIvPjxlbGxpcHNlIGN4PSIzMCIgY3k9IjYwIiByeD0iMjQiIHJ5PSIzMiIgZmlsbD0iIzdiMjQxYyIvPjxlbGxpcHNlIGN4PSI3MCIgY3k9IjYwIiByeD0iMjQiIHJ5PSIzMiIgZmlsbD0iIzdiMjQxYyIvPjxlbGxpcHNlIGN4PSI1MCIgY3k9IjYwIiByeD0iMjIiIHJ5PSIzNCIgZmlsbD0iIzkyMmIyMSIvPjwvc3ZnPg==">
 <style>
   :root {
     /* Crimson design system. No semantic success colour anywhere (reserved for status in other Strategos tools). */
@@ -854,7 +855,9 @@ for (const [key, [tab]] of Object.entries(TABS)) $(tab).onclick = () => showTab(
 
 // "online" | "blocked" | "offline". A CORS failure and a dead port both reject fetch();
 // an opaque no-cors probe still resolves when something is listening, which tells them apart.
+// Hidden tab → no probe (no console noise from a dead :7332); visibilitychange re-probes on return.
 async function treskaStatus() {
+  if (document.visibilityState !== "visible") return null;
   let state = "offline";
   try {
     const res = await fetch(TRESKA + "/api/health", { cache: "no-store" });
@@ -1077,7 +1080,12 @@ guard(async () => {
   if (current) await refreshAll(); // e.g. browser refresh mid-competition: straight to the cockpit
   else await openLaunch();
 })();
-setInterval(guard(async () => { if (session) await refreshSession(); }), 15000); // picks up the 60 s auto-save timestamp
+setInterval(guard(async () => { if (session && document.visibilityState === "visible") await refreshSession(); }), 15000); // picks up the 60 s auto-save timestamp
+document.addEventListener("visibilitychange", guard(async () => {
+  if (document.visibilityState !== "visible") return;
+  if (!$("parseView").hidden) treskaStatus();
+  if (session) await refreshSession();
+}));
 </script>
 </body>
 </html>

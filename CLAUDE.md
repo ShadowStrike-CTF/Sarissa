@@ -174,3 +174,14 @@ Invariants:
   v1.0 has no `results` key. Adding one needs the tools to persist results first → schema bump.
 - Frontend: `Export JSON` button + `#exportStatus` span in the header session bar (visible on every
   tab). Blob download; errors shown inline via textContent. No alert/confirm/prompt, no innerHTML.
+
+## Phase 10 (v1.3.0)
+- Favicon: inline `<link rel="icon" href="data:image/svg+xml;base64,...">` in `index.html` `<head>`.
+  Hand-drawn pumpkin SVG in Sarissa crimson (`#922b21`, sides `#7b241c`, brown stem) — no emoji,
+  no green, no external file. The HTML is static, so the base64 is a literal (encoded once, never
+  per request) and there is no Python favicon constant.
+- Visibility gates (intervals unchanged): `treskaStatus()` returns early unless
+  `document.visibilityState === "visible"`; the 15 s session refresh skips hidden tabs; one
+  `visibilitychange` listener re-runs both on return (Treska only if the Parse tab is open).
+- Treska has no timer — it is probed on demand (Parse tab click, upload). Do not add polling.
+- Tests: 148 → 151 (`tests/test_phase10.py`).
