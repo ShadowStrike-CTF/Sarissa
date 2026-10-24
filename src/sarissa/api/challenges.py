@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from sarissa.api.session import SessionManager, get_manager, utc_now
 
@@ -43,6 +43,21 @@ def compute_tally(challenges: Iterable[dict[str, Any]]) -> dict[str, int]:
     }
 
 
+def compute_score(challenges: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """Score panel totals. points == 0 means unset, so only scored challenges add points."""
+    items = list(challenges)
+    scored = [c for c in items if c["points"] > 0]
+    total = sum(c["points"] for c in scored)
+    secured = sum(c["points"] for c in scored if c["status"] == Status.SOLVED.value)
+    return {
+        "total_points": total,
+        "secured_points": secured,
+        "remaining_points": total - secured,
+        "solved_count": sum(1 for c in items if c["status"] == Status.SOLVED.value),
+        "total_challenges": len(items),
+    }
+
+
 # --- API -------------------------------------------------------------------
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
@@ -68,6 +83,14 @@ class ChallengeUpdate(BaseModel):
 
 class StatusChange(BaseModel):
     status: Status
+
+
+class ScoreUpdate(BaseModel):
+    # Strict: true/"100"/1.0 are not points, 1/"yes" are not solved. Omitted = unchanged.
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    point_value: StrictInt | None = Field(default=None, ge=0, le=9999)
+    solved: StrictBool | None = None
 
 
 def _challenges(manager: SessionManager) -> list[dict[str, Any]]:
@@ -109,20 +132,42 @@ def update_challenge(
     return challenge
 
 
+def _check_transition(challenge: dict[str, Any], new: Status) -> None:
+    current = Status(challenge["status"])
+    if not can_transition(current, new):
+        raise HTTPException(409, f"Status cannot move backwards: {current.value} → {new.value}")
+
+
+def _advance(challenge: dict[str, Any], new: Status) -> None:
+    _check_transition(challenge, new)
+    if new != Status(challenge["status"]):
+        challenge["status"] = new.value
+        if new is Status.SOLVED:
+            challenge["solved_at"] = utc_now()
+
+
 @router.post("/{challenge_id}/status")
 def change_status(
     challenge_id: str, body: StatusChange, manager: SessionManager = Depends(get_manager)
 ) -> dict[str, Any]:
     challenge = _find(manager, challenge_id)
-    current = Status(challenge["status"])
-    if not can_transition(current, body.status):
-        raise HTTPException(
-            409, f"Status cannot move backwards: {current.value} → {body.status.value}"
-        )
-    if body.status != current:
-        challenge["status"] = body.status.value
-        if body.status is Status.SOLVED:
-            challenge["solved_at"] = utc_now()
+    _advance(challenge, body.status)
+    return challenge
+
+
+@router.patch("/{challenge_id}/score")
+def update_score(
+    challenge_id: str, body: ScoreUpdate, manager: SessionManager = Depends(get_manager)
+) -> dict[str, Any]:
+    """`point_value` is stored as `points`; `solved` is status == solved and only moves forward."""
+    challenge = _find(manager, challenge_id)
+    # solved: false only ever means "not solved yet" — it can never un-solve a challenge.
+    if body.solved is False and challenge["status"] == Status.SOLVED.value:
+        _check_transition(challenge, Status.UNSOLVED)  # raises 409 before anything is written
+    if body.point_value is not None:
+        challenge["points"] = body.point_value
+    if body.solved:
+        _advance(challenge, Status.SOLVED)
     return challenge
 
 
@@ -131,3 +176,12 @@ def delete_challenge(challenge_id: str, manager: SessionManager = Depends(get_ma
     challenge = _find(manager, challenge_id)
     _challenges(manager).remove(challenge)
     return Response(status_code=204)
+
+
+# GET /api/session/score lives here (not in session.py) so session never imports challenges.
+score_router = APIRouter(prefix="/api/session", tags=["challenges"])
+
+
+@score_router.get("/score")
+def session_score(manager: SessionManager = Depends(get_manager)) -> dict[str, int]:
+    return compute_score(_challenges(manager))
