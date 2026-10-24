@@ -185,3 +185,63 @@ Invariants:
   `visibilitychange` listener re-runs both on return (Treska only if the Parse tab is open).
 - Treska has no timer — it is probed on demand (Parse tab click, upload). Do not add polling.
 - Tests: 148 → 151 (`tests/test_phase10.py`).
+
+## Phase 11 — Challenge scoring + strategy view (v1.4.0)
+
+Field mapping (R-approved — the brief's names map onto fields challenges already store):
+| Brief name | Stored as | Type | Default | Meaning |
+|---|---|---|---|---|
+| `point_value` | `points` | int ≥ 0 | 0 | Point value (0 = unset) |
+| `solved` | `status == "solved"` | derived | false | Flag submitted (one-way, never unticked) |
+
+No new stored fields, no new tables, no session-file migration. `solved` is NOT a second flag
+beside `status` — two sources of truth would drift and a reversible tick would move status backwards.
+
+Routes:
+- `PATCH /api/challenges/{id}/score` (plural prefix — same router as every challenge route).
+  Body strict, extra forbidden: `point_value` StrictInt 0–9999, `solved` StrictBool, both optional
+  (omitted = unchanged). `point_value` → writes `points`. `solved: true` → advances status to solved
+  and sets `solved_at` (no-op if already solved). `solved: false` on a solved challenge → 409
+  (one-way, same rule as `/status`); on an unsolved one → no-op. The whole body is checked before
+  anything is written. Returns the challenge as stored. 404 unknown id · 409 no session · 422 bad body.
+- `GET /api/session/score` → `{"total_points", "secured_points", "remaining_points", "solved_count",
+  "total_challenges"}`. Point sums count only challenges with `points > 0`; secured = those solved;
+  remaining = total − secured. `solved_count` / `total_challenges` count every challenge.
+  409 no session. Lives on a `score_router` in `api/challenges.py` (avoids a session↔challenges cycle).
+
+UI:
+- Score panel `#scorePanel` in the header session bar: "<secured> / <total> pts". Muted by default,
+  `--crimson` when secured > 80% of total (total > 0). Re-fetched after every challenge change.
+- Per challenge: number input (0–9999) for points, saves on blur/Enter via the score PATCH. The
+  existing forward-only "Solved" button is the tick — no untick. Solved rows get reduced opacity;
+  they are never hidden.
+- Sort select `#chalSort` beside the Challenges heading: "Default" (existing order: in progress,
+  unsolved, solved) / "By points (high → low)". JS variable only — no storage, no server state.
+- textContent only. No innerHTML, no browser dialogs, no green, no transitions or animations.
+
+Export: unchanged — `schema_version` stays `"1.0"`. Challenges already carry `points` and `status`,
+so Zapis gets the scoring data without a schema bump. (The brief's v1.1 bump was dropped: nothing
+new is stored, and export never fabricates fields.)
+
+Invariants:
+- INV-1: Scoring uses the existing challenge fields (`points`, `status`) — no new fields or tables.
+- INV-2: The score panel shows `GET /api/session/score` — totals are never computed in the frontend.
+- INV-3: `points = 0` means unset — excluded from point totals.
+- INV-4: Sort is frontend-only UI state — the server always returns creation order.
+- INV-5: Export schema stays v1.0 — existing consumers (Zapis Ph6) see no change.
+- INV-6: Ph1–Ph10 tests stay green — no regressions.
+
+What NOT to do:
+- ❌ Compute score totals in the frontend — `/api/session/score` owns the maths
+- ❌ Include `points = 0` in `total_points`
+- ❌ Hide solved challenges — de-emphasise only
+- ❌ Let `solved` (or anything else) move status backwards
+- ❌ Persist sort order — server-side or in browser storage
+- ❌ Add `point_value` / `solved` keys to stored challenges or the export
+
+Tests (`tests/test_scoring.py`, 151 → 161):
+`test_patch_challenge_score_point_value`, `test_patch_challenge_score_solved`,
+`test_patch_challenge_score_partial`, `test_get_session_score_totals`,
+`test_get_session_score_excludes_zero_value`, `test_export_scoring_fields`,
+`test_score_409_no_session`, `test_patch_score_cannot_unsolve`, `test_patch_score_validation`,
+`test_cockpit_scoring_ui`.
