@@ -102,6 +102,7 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="Sarissa", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.sessions = manager
     app.include_router(challenges.router)
+    app.include_router(challenges.score_router)
     app.include_router(tools.router)
     app.include_router(session.router)
 
