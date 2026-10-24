@@ -39,6 +39,9 @@
   .session-name { font-family: var(--mono); color: var(--text); background: var(--crimson-lo); padding: 3px 8px; border-radius: 4px; }
   /* Fixed width so "Saving…" / "Saved 14:32" swaps never shift the header. */
   .saved { color: var(--muted); font-size: 12px; min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* Score panel: secured / available points from /api/session/score. Crimson once > 80% secured. */
+  .score { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .score.hot { color: var(--crimson); }
 
   /* Header tabs: Cockpit (the three columns) | Parse (Treska results) | Generate (Poligon). */
   .tabs { display: flex; gap: 6px; }
@@ -94,17 +97,21 @@
   .tally { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 10px; }
   .tally .big { font-size: 26px; font-weight: 700; color: var(--text); }
   .tally .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .chal-head { justify-content: space-between; margin-bottom: 10px; }
+  .chal-head h2 { margin: 0; }
+  .chal-head select { padding: 2px 6px; font-size: 12px; }
   .add-form { display: grid; grid-template-columns: 1fr 64px auto; gap: 6px; margin-bottom: 10px; }
   .add-form input[name=name] { grid-column: 1 / -1; }
   /* Status is readable at a glance: left-border colour + row tint, not just the badge text. */
   .chal { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 6px; background: var(--surface-2); }
   .chal.in_progress { border-left-color: var(--crimson-hi); background: var(--crimson-lo); }
-  .chal.solved { border-left-color: var(--muted); background: var(--surface); }
+  /* Solved: de-emphasised, never hidden. */
+  .chal.solved { border-left-color: var(--muted); background: var(--surface); opacity: .55; }
   .chal.solved .name { color: var(--muted); font-weight: 400; }
   .chal.solved .pts { color: var(--muted); }
   .chal .top { display: flex; gap: 8px; align-items: baseline; }
   .chal .name { font-weight: 600; flex: 1; word-break: break-word; }
-  .chal .pts { font-family: var(--mono); color: var(--crimson-hi); }
+  .chal .pts { font-family: var(--mono); color: var(--crimson-hi); width: 7ch; padding: 1px 4px; text-align: right; }
   .chal .meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
   .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--border); color: var(--muted); }
   .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; }
@@ -236,6 +243,7 @@
   <div class="session-bar">
     <span class="muted">Session</span>
     <span class="session-name" id="sessionName">—</span>
+    <span class="score" id="scorePanel" title="Points secured / available (unset points excluded)">0 / 0 pts</span>
     <span class="saved" id="savedAt" aria-live="polite"></span>
     <button class="ghost" id="openSessions">Sessions</button>
     <button id="saveSession">Save</button>
@@ -248,7 +256,13 @@
   <!-- LEFT: challenges -->
   <div class="col">
     <section>
-      <h2>Challenges</h2>
+      <div class="row chal-head">
+        <h2>Challenges</h2>
+        <select id="chalSort" aria-label="Sort challenges">
+          <option value="default">Default</option>
+          <option value="points">By points (high → low)</option>
+        </select>
+      </div>
       <div class="tally">
         <div><div class="big" id="tallyPoints">0 / 0</div><div class="lbl">Points</div></div>
         <div><div class="big" id="tallySolved">0 / 0</div><div class="lbl">Solved</div></div>
@@ -651,20 +665,42 @@ async function exportSession() {
 $("exportSession").onclick = guard(exportSession);
 
 /* ---------- Challenges ---------- */
+let challengeData = [];
+let chalSort = "default"; // UI state only: never stored, never sent to the server
+
 async function refreshChallenges() {
   const { challenges, tally } = await api("/api/challenges");
+  challengeData = challenges;
   $("tallyPoints").textContent = `${tally.earned} / ${tally.total}`;
   $("tallySolved").textContent = `${tally.solved} / ${tally.count}`;
   $("tallyActive").textContent = tally.in_progress;
+  renderChallengeList();
+  await refreshScore();
+}
+
+function renderChallengeList() {
   const list = $("challengeList");
-  if (!challenges.length) {
+  if (!challengeData.length) {
     list.replaceChildren(el("div", { className: "empty", textContent: "No challenges yet." }));
     return;
   }
   const order = { in_progress: 0, unsolved: 1, solved: 2 };
-  const sorted = [...challenges].sort((a, b) => order[a.status] - order[b.status]);
+  const sorted = [...challengeData].sort((a, b) => order[a.status] - order[b.status]);
+  if (chalSort === "points") sorted.sort((a, b) => b.points - a.points); // stable: ties keep default order
+  // Tabbing between points inputs re-renders the list; keep focus on the input the user moved to.
+  const focused = document.activeElement && document.activeElement.dataset.chal;
   list.replaceChildren(...sorted.map(renderChallenge));
+  if (focused) list.querySelector(`input[data-chal="${CSS.escape(focused)}"]`)?.focus();
 }
+
+async function refreshScore() {
+  const s = await api("/api/session/score");
+  $("scorePanel").textContent = `${s.secured_points} / ${s.total_points} pts`;
+  // Display threshold only; the totals themselves always come from the server.
+  $("scorePanel").classList.toggle("hot", s.total_points > 0 && s.secured_points > 0.8 * s.total_points);
+}
+
+$("chalSort").onchange = () => { chalSort = $("chalSort").value; renderChallengeList(); };
 
 function renderChallenge(c) {
   const meta = el("div", { className: "meta" },
@@ -692,10 +728,25 @@ function renderChallenge(c) {
     await refreshChallenges();
   });
   meta.append(del);
+  // Points (0 = unset): saved on blur or Enter through the score route.
+  const pts = el("input", { className: "pts", type: "number", min: 0, max: 9999, step: 1, value: String(c.points), title: "Points (0 = unset)" });
+  pts.dataset.chal = c.id;
+  pts.setAttribute("aria-label", `Points for ${c.name}`);
+  pts.onkeydown = (ev) => { if (ev.key === "Enter") pts.blur(); };
+  pts.onblur = guard(async () => {
+    const raw = pts.value.trim();
+    const value = raw === "" ? 0 : Number(raw);
+    if (value === c.points) return;
+    try {
+      await api(`/api/challenges/${c.id}/score`, { method: "PATCH", json: { point_value: value } });
+    } finally {
+      await refreshChallenges(); // on a rejected value this restores the stored points
+    }
+  });
   return el("div", { className: `chal ${c.status}` },
     el("div", { className: "top" },
       el("span", { className: "name", textContent: c.name }),
-      el("span", { className: "pts", textContent: `${c.points} pts` })),
+      pts),
     meta);
 }
 
