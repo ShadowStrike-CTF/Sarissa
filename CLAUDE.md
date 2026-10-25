@@ -301,3 +301,65 @@ Tests (`tests/test_categories.py`, 161 → 169):
 `test_get_session_categories_returns_sorted_unique`, `test_get_session_categories_excludes_empty`,
 `test_get_session_categories_empty_session`, `test_export_category_field`,
 `test_category_409_no_session`, `test_cockpit_category_ui`.
+
+## Phase 13 — Per-challenge timer (v1.6.0)
+
+Each challenge gets its own stopwatch, separate from the session countdown/elapsed timer.
+The server stores only "seconds banked" and "when the clock was last started". The browser does
+the live counting.
+
+New fields per challenge (stored in the existing challenge dict, persisted server-side):
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `challenge_time_seconds` | int ≥ 0 | 0 | Total time banked on this challenge (whole seconds) |
+| `challenge_timer_started_at` | ISO8601 str \| null | null | When the challenge timer last started; null when stopped |
+
+New challenges get both defaults on create. Client-sent timer fields are ignored on create and
+rejected on edit (`PATCH /api/challenges/{id}` is already `extra="forbid"`). Old session files:
+`SessionManager.load` backfills both fields with `setdefault` (0 / null). From then on they really
+are stored, so export still never fabricates. The file is rewritten at the next save.
+
+Routes (R-approved: plural prefix, the same router as every challenge route, not the brief's
+singular `/api/challenge/`). All three return `{"id", "challenge_timer_started_at",
+"challenge_time_seconds"}`. Errors: 404 unknown id · 409 no session (app-wide `NoActiveSession` handler).
+- `POST /api/challenges/{id}/timer/start` sets `challenge_timer_started_at` to the server's `utc_now()`.
+  Idempotent: if it is already running, it returns the current state unchanged (start time kept).
+- `POST /api/challenges/{id}/timer/stop` adds `max(0, int(now − started_at))` seconds to
+  `challenge_time_seconds` and sets `challenge_timer_started_at` to null. Idempotent: if it is already
+  stopped, it returns the current state unchanged.
+- `GET /api/challenges/{id}/timer` returns the current state. Read-only.
+- Start/stop save the session immediately, like `PUT /api/session/timer`. A crash never loses a running start time.
+
+Export → schema `"1.3"` (R-approved; 1.1 and 1.2 never existed because Ph11/Ph12 dropped their bumps).
+Challenges gain `challenge_time_seconds`. `challenge_timer_started_at` is stripped from the export.
+Additive: every v1.0 key is unchanged. This supersedes the "stays v1.0" notes in Ph9/Ph11/Ph12.
+
+UI:
+- Per challenge: a timer readout (`.ctimer`, mono, HH:MM:SS) plus a start/stop button in the meta row,
+  labelled "▶ Timer" / "■ Stop". It is not "Start", because that label already belongs to the status button
+  (unsolved → in progress).
+- Live display = `challenge_time_seconds` + time since `challenge_timer_started_at`, computed in the
+  browser by the existing 250 ms `tick()` (no new interval), using the session clock offset.
+- Start/stop responses are merged into the local challenge list. No polling loop.
+- Running: crimson-hi text with a static "●" indicator. Stopped: muted, showing banked time.
+- textContent only. No innerHTML, no browser dialogs, no green, no transitions or animations.
+
+Invariants:
+- INV-1: The challenge timer is INDEPENDENT of the session timer. Different concerns, different fields.
+- INV-2: `challenge_timer_started_at` is NOT exported. Only `challenge_time_seconds` is.
+- INV-3: The client computes the live display. The server never sends a "current elapsed" field.
+- INV-4: Start and stop are idempotent. No error if the timer is already in that state.
+- INV-5: Timer fields live in the existing challenge dict. No new tables.
+- INV-6: Ph11 scoring + Ph12 categories are untouched. Ph1–Ph12 tests stay green (the three
+  `schema_version == "1.0"` assertions move to `"1.3"`).
+
+What NOT to do:
+- ❌ Export `challenge_timer_started_at`. Only `challenge_time_seconds` is exported.
+- ❌ Compute live elapsed on the server. The client computes the display.
+- ❌ Tie the challenge timer to session timer state (or auto-stop it on status changes)
+- ❌ Raise an error on an idempotent start/stop. Return the current state.
+
+Tests (`tests/test_challenge_timer.py`, 169 → 177):
+`test_timer_start_sets_timestamp`, `test_timer_stop_accumulates_seconds`, `test_timer_stop_idempotent`,
+`test_timer_start_idempotent`, `test_timer_get_state`, `test_export_schema_v1_3`,
+`test_timer_independent_of_session_timer`, `test_timer_409_no_session`.

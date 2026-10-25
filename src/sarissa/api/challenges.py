@@ -13,7 +13,7 @@ from typing import Any, Iterable
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
-from sarissa.api.session import SessionManager, get_manager, utc_now
+from sarissa.api.session import SessionManager, get_manager, parse_utc, utc_now
 
 
 class Status(str, Enum):
@@ -130,6 +130,8 @@ def create_challenge(body: ChallengeCreate, manager: SessionManager = Depends(ge
         "status": Status.UNSOLVED.value,
         "created_at": utc_now(),
         "solved_at": None,
+        "challenge_time_seconds": 0,
+        "challenge_timer_started_at": None,
     }
     _challenges(manager).append(challenge)
     return challenge
@@ -190,6 +192,43 @@ def update_category(
     challenge = _find(manager, challenge_id)
     challenge["category"] = body.category
     return challenge
+
+
+def _timer_state(challenge: dict[str, Any]) -> dict[str, Any]:
+    # No "current elapsed" field: the browser adds the time since started_at itself.
+    return {
+        "id": challenge["id"],
+        "challenge_timer_started_at": challenge["challenge_timer_started_at"],
+        "challenge_time_seconds": challenge["challenge_time_seconds"],
+    }
+
+
+@router.get("/{challenge_id}/timer")
+def get_challenge_timer(challenge_id: str, manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
+    return _timer_state(_find(manager, challenge_id))
+
+
+@router.post("/{challenge_id}/timer/start")
+def start_challenge_timer(challenge_id: str, manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
+    """Idempotent: an already-running timer keeps its original start time."""
+    challenge = _find(manager, challenge_id)
+    if challenge["challenge_timer_started_at"] is None:
+        challenge["challenge_timer_started_at"] = utc_now()
+        manager.save()  # a crash never loses a running start time
+    return _timer_state(challenge)
+
+
+@router.post("/{challenge_id}/timer/stop")
+def stop_challenge_timer(challenge_id: str, manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
+    """Bank whole seconds since the last start. Idempotent: a stopped timer is left as is."""
+    challenge = _find(manager, challenge_id)
+    started = challenge["challenge_timer_started_at"]
+    if started is not None:
+        elapsed = (parse_utc(utc_now()) - parse_utc(started)).total_seconds()
+        challenge["challenge_time_seconds"] += max(0, int(elapsed))
+        challenge["challenge_timer_started_at"] = None
+        manager.save()
+    return _timer_state(challenge)
 
 
 @router.delete("/{challenge_id}", status_code=204)
