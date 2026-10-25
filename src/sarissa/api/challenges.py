@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
 from sarissa.api.session import SessionManager, get_manager, utc_now
 
@@ -58,6 +58,11 @@ def compute_score(challenges: Iterable[dict[str, Any]]) -> dict[str, int]:
     }
 
 
+def compute_categories(challenges: Iterable[dict[str, Any]]) -> list[str]:
+    """Filter bar chips: unique non-empty categories, sorted. "" means uncategorised."""
+    return sorted({c["category"] for c in challenges} - {""})
+
+
 # --- API -------------------------------------------------------------------
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
@@ -91,6 +96,13 @@ class ScoreUpdate(BaseModel):
 
     point_value: StrictInt | None = Field(default=None, ge=0, le=9999)
     solved: StrictBool | None = None
+
+
+class CategoryUpdate(BaseModel):
+    # Any string, "" included, stored as sent — only the same 64-char cap as create/edit.
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    category: StrictStr = Field(max_length=64)
 
 
 def _challenges(manager: SessionManager) -> list[dict[str, Any]]:
@@ -171,6 +183,15 @@ def update_score(
     return challenge
 
 
+@router.patch("/{challenge_id}/category")
+def update_category(
+    challenge_id: str, body: CategoryUpdate, manager: SessionManager = Depends(get_manager)
+) -> dict[str, Any]:
+    challenge = _find(manager, challenge_id)
+    challenge["category"] = body.category
+    return challenge
+
+
 @router.delete("/{challenge_id}", status_code=204)
 def delete_challenge(challenge_id: str, manager: SessionManager = Depends(get_manager)) -> Response:
     challenge = _find(manager, challenge_id)
@@ -178,10 +199,16 @@ def delete_challenge(challenge_id: str, manager: SessionManager = Depends(get_ma
     return Response(status_code=204)
 
 
-# GET /api/session/score lives here (not in session.py) so session never imports challenges.
+# GET /api/session/score and /categories live here (not in session.py) so session never
+# imports challenges.
 score_router = APIRouter(prefix="/api/session", tags=["challenges"])
 
 
 @score_router.get("/score")
 def session_score(manager: SessionManager = Depends(get_manager)) -> dict[str, int]:
     return compute_score(_challenges(manager))
+
+
+@score_router.get("/categories")
+def session_categories(manager: SessionManager = Depends(get_manager)) -> list[str]:
+    return compute_categories(_challenges(manager))
