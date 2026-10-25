@@ -103,11 +103,11 @@ def test_get_session_score_excludes_zero_value(client):
 
 
 def test_export_scoring_fields(client):
-    """Export stays schema v1.0: scoring data travels in the stored points/status fields."""
+    """No scoring-specific schema bump: scoring data travels in the stored points/status fields."""
     cid = add(client, "disk image", 200)["id"]
     score(client, cid, solved=True)
     data = client.get("/api/export").json()
-    assert data["schema_version"] == "1.0"
+    assert data["schema_version"] == "1.3"
     chal = data["challenges"][0]
     assert chal["points"] == 200 and chal["status"] == "solved"
     assert "point_value" not in chal and "solved" not in chal
