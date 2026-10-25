@@ -439,3 +439,61 @@ check the JS in the page). The suite has no headless browser and CI only install
 `test_shortcut_suppressed_in_input`, `test_j_k_navigation_wraps`, `test_s_marks_solved`,
 `test_t_starts_stops_timer`, `test_n_focuses_notes`, `test_space_starts_session_timer_only_when_stopped`,
 `test_selection_frontend_only`.
+
+## Phase 15 — Post-competition review (v1.8.0)
+
+Purpose: show where the time went after a competition/practice run — time per category and per
+challenge, solved vs unsolved, points per hour. Data already exists (Ph11 points, Ph12 categories,
+Ph13 timers); Ph15 only reads it.
+
+Scope IN: read-only review computed server-side from the current session; per-category rollup
+(challenge count, solved count, total time, points earned, points available, points per hour);
+per-challenge table sorted by time desc (category, status, time, points, solved); "time sink" = total
+time on challenges still unsolved; Review panel in the UI.
+Scope OUT: cross-session history, verification-rate metric, Poligon calibration feedback, charts beyond
+plain CSS bars.
+
+Invariants (R-approved):
+- INV-R1: review is derived, never stored — no new session fields, export schema stays "1.3".
+- INV-R2: a running challenge timer counts live elapsed to the request moment, item flagged
+  "running": true; review never stops or banks a timer.
+- INV-R3: division by zero is safe — total time 0 → points_per_hour null (not 0, not an error).
+- INV-R4: no new browser storage.
+
+API: `GET /api/review` → 200
+```
+{"generated_utc", "totals": {"challenges","solved","time_seconds","points_earned","points_available","points_per_hour","unsolved_time_seconds"},
+ "by_category": [{"category","challenges","solved","time_seconds","points_earned","points_available","points_per_hour"}],
+ "by_challenge": [{"id","name","category","status","time_seconds","points","solved","running"}]}
+```
+409 with no session (existing handler). No category → "Uncategorised". by_challenge sorted by
+time_seconds desc, then name.
+
+Spec correction (R-approved): the brief wrote `"title"` in `by_challenge` and "then title" in the sort.
+Challenges store their title as `name` (since Phase 2) and every challenge route returns `name`, so the
+review uses `name` too. There is no `title` field and no title←name mapping.
+
+Pinned details (R-approved):
+- `time_seconds` per challenge = `challenge_time_seconds` + `max(0, int(now − challenge_timer_started_at))`
+  while running. `now` is read through the module-level `utc_now` in `api/challenges.py` (tests monkeypatch it).
+- `points_per_hour` = `round(points_earned / (time_seconds / 3600), 2)`; null when `time_seconds` is 0.
+- `points_earned` / `points_available` count only `points > 0` (Ph11 INV-3); earned = solved ones.
+- `unsolved_time_seconds` = time on challenges whose status is not solved.
+- `by_category` sorted by `time_seconds` desc, then category name ("Uncategorised" sorts like any name).
+- Route lives in `api/challenges.py` beside `score_router` (avoids a session↔challenges cycle). GET only;
+  it never calls `manager.save()` and never writes to the challenge dicts.
+
+UI: "Review" header button + key "r" in SHORTCUTS/KEYMAP via the same isTyping()/guard path; panel =
+totals row, category table with plain CSS width bars (var(--…) colours only), challenge table; Escape
+closes (Escape-first rule). textContent only — no innerHTML, no browser dialogs, no green, no transitions.
+- `#reviewPanel`: fixed inline overlay outside `<main>` (works on every tab), like `#shortcutPanel`.
+  Re-fetches `/api/review` each time it opens. `r` toggles it.
+
+What NOT to do: no stored review fields, no export schema bump, no timer mutation from the review, no
+localStorage/sessionStorage, no new dependencies.
+
+Tests (`tests/test_review.py`, 187 → 196). Fixtures copied from `tests/test_challenge_timer.py`:
+`test_review_empty_session`, `test_review_category_rollup`, `test_review_sorted_by_time_desc`,
+`test_review_running_timer_counts_live`, `test_review_does_not_mutate_session`,
+`test_review_unsolved_time_sink`, `test_review_409_no_session`, `test_export_schema_unchanged_1_3`,
+`test_review_ui_static` (r in SHORTCUTS/KEYMAP, `#reviewPanel` present, no innerHTML/localStorage/sessionStorage).
