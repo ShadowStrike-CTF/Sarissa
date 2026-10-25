@@ -119,6 +119,10 @@ class SessionManager:
         if not path.is_file():
             raise FileNotFoundError(f"Session {name!r} not found")
         data = json.loads(path.read_text(encoding="utf-8"))
+        for challenge in data.get("challenges", []):
+            # Pre-Phase-13 files: backfill the per-challenge timer (stored from now on).
+            challenge.setdefault("challenge_time_seconds", 0)
+            challenge.setdefault("challenge_timer_started_at", None)
         self.save()
         self.current = data
         self.last_saved = data.get("updated_at")

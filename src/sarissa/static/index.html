@@ -124,6 +124,8 @@
   .badge.solved { background: transparent; border: 1px solid var(--border); color: var(--muted); }
   .chal .meta button { padding: 2px 8px; font-size: 12px; }
   .chal .meta .spacer { flex: 1; }
+  .chal .ctimer { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chal .ctimer.running { color: var(--crimson-hi); }
 
   /* Timer */
   .clock { font-family: var(--mono); font-size: 48px; font-weight: 700; text-align: center; letter-spacing: .04em; padding: 8px 0; }
@@ -753,7 +755,22 @@ function renderChallenge(c) {
       await refreshChallenges();
     }
   });
-  meta.append(cat, el("span", { className: "spacer" }));
+  // Per-challenge timer: the server stores banked seconds + start time; tick() draws the live value.
+  const running = !!c.challenge_timer_started_at;
+  const clock = el("span", { className: "ctimer" + (running ? " running" : ""), title: "Time on this challenge" });
+  clock.dataset.seconds = c.challenge_time_seconds;
+  clock.dataset.started = c.challenge_timer_started_at || "";
+  drawChallengeTimer(clock);
+  // Not "Start": that label already belongs to the status button (unsolved → in progress).
+  const timerBtn = el("button", { className: "ghost", textContent: running ? "■ Stop" : "▶ Timer", onclick: guard(async () => {
+    ownSavePending = true; // the server saves immediately on start/stop
+    const state = await api(`/api/challenges/${c.id}/timer/${running ? "stop" : "start"}`, { method: "POST" });
+    c.challenge_time_seconds = state.challenge_time_seconds;
+    c.challenge_timer_started_at = state.challenge_timer_started_at;
+    renderChallengeList();
+  }) });
+  timerBtn.setAttribute("aria-label", `${running ? "Stop" : "Start"} timer for ${c.name}`);
+  meta.append(cat, clock, timerBtn, el("span", { className: "spacer" }));
   // Forward-only: only the next statuses are ever offered.
   for (const next of NEXT[c.status]) {
     meta.append(el("button", { textContent: LABEL[next], onclick: guard(async () => {
@@ -846,8 +863,16 @@ function tick() {
   const urgent = t.mode === "countdown" && !!t.started_at && t.duration_seconds > 0
     && t.duration_seconds * 1000 - elapsed < session.urgent_threshold * 1000;
   $("timerPanel").classList.toggle("timer--urgent", urgent);
+  for (const node of document.querySelectorAll(".ctimer")) drawChallengeTimer(node);
 }
 setInterval(tick, 250);
+
+// Live value = banked seconds + time since the last start. Computed here; the server never sends it.
+function drawChallengeTimer(node) {
+  const started = node.dataset.started;
+  const live = started ? Math.max(0, Date.now() + clockOffset - Date.parse(started)) : 0;
+  node.textContent = (started ? "● " : "") + fmtDuration(Number(node.dataset.seconds) * 1000 + live);
+}
 
 async function updateTimer(body) {
   ownSavePending = true; // the server saves immediately on timer changes

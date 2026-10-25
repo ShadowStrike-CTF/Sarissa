@@ -335,7 +335,9 @@ Challenges gain `challenge_time_seconds`. `challenge_timer_started_at` is stripp
 Additive: every v1.0 key is unchanged. This supersedes the "stays v1.0" notes in Ph9/Ph11/Ph12.
 
 UI:
-- Per challenge: a timer readout (`.ctimer`, mono, HH:MM:SS) plus a Start/Stop button in the meta row.
+- Per challenge: a timer readout (`.ctimer`, mono, HH:MM:SS) plus a start/stop button in the meta row,
+  labelled "▶ Timer" / "■ Stop". It is not "Start", because that label already belongs to the status button
+  (unsolved → in progress).
 - Live display = `challenge_time_seconds` + time since `challenge_timer_started_at`, computed in the
   browser by the existing 250 ms `tick()` (no new interval), using the session clock offset.
 - Start/stop responses are merged into the local challenge list. No polling loop.
