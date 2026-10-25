@@ -100,6 +100,9 @@
   .chal-head { justify-content: space-between; margin-bottom: 10px; }
   .chal-head h2 { margin: 0; }
   .chal-head select { padding: 2px 6px; font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .chips[hidden] { display: none; }
+  .chips button { padding: 2px 8px; font-size: 12px; }
   .add-form { display: grid; grid-template-columns: 1fr 64px auto; gap: 6px; margin-bottom: 10px; }
   .add-form input[name=name] { grid-column: 1 / -1; }
   /* Status is readable at a glance: left-border colour + row tint, not just the badge text. */
@@ -113,6 +116,7 @@
   .chal .name { font-weight: 600; flex: 1; word-break: break-word; }
   .chal .pts { font-family: var(--mono); color: var(--crimson-hi); width: 7ch; padding: 1px 4px; text-align: right; }
   .chal .meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .chal .cat { font-size: 11px; padding: 1px 6px; width: 12ch; color: var(--muted); }
   .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--border); color: var(--muted); }
   .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; }
   .badge.unsolved { background: var(--border); color: var(--text); }
@@ -263,6 +267,7 @@
           <option value="points">By points (high → low)</option>
         </select>
       </div>
+      <div class="chips" id="catFilter" role="group" aria-label="Filter by category" hidden></div>
       <div class="tally">
         <div><div class="big" id="tallyPoints">0 / 0</div><div class="lbl">Points</div></div>
         <div><div class="big" id="tallySolved">0 / 0</div><div class="lbl">Solved</div></div>
@@ -667,10 +672,15 @@ $("exportSession").onclick = guard(exportSession);
 /* ---------- Challenges ---------- */
 let challengeData = [];
 let chalSort = "default"; // UI state only: never stored, never sent to the server
+let catFilter = new Set(); // selected category chips (OR); empty = All. UI state only, like chalSort
+let categories = []; // from /api/session/categories — the server owns the list
 
 async function refreshChallenges() {
-  const { challenges, tally } = await api("/api/challenges");
+  const [{ challenges, tally }, cats] = await Promise.all([api("/api/challenges"), api("/api/session/categories")]);
   challengeData = challenges;
+  categories = cats;
+  // A category that no longer exists can't stay selected (it would hide every challenge).
+  catFilter = new Set([...catFilter].filter((c) => categories.includes(c)));
   $("tallyPoints").textContent = `${tally.earned} / ${tally.total}`;
   $("tallySolved").textContent = `${tally.solved} / ${tally.count}`;
   $("tallyActive").textContent = tally.in_progress;
@@ -678,19 +688,42 @@ async function refreshChallenges() {
   await refreshScore();
 }
 
+function renderCatFilter() {
+  const bar = $("catFilter");
+  bar.hidden = !categories.length;
+  const chip = (label, active, onclick) => {
+    const b = el("button", { className: "ghost" + (active ? " active" : ""), textContent: label, onclick });
+    b.setAttribute("aria-pressed", String(active));
+    return b;
+  };
+  bar.replaceChildren(
+    chip("All", !catFilter.size, () => { catFilter.clear(); renderChallengeList(); }),
+    ...categories.map((cat) => chip(cat, catFilter.has(cat), () => {
+      if (!catFilter.delete(cat)) catFilter.add(cat);
+      renderChallengeList();
+    })));
+}
+
 function renderChallengeList() {
+  renderCatFilter();
   const list = $("challengeList");
   if (!challengeData.length) {
     list.replaceChildren(el("div", { className: "empty", textContent: "No challenges yet." }));
     return;
   }
+  const shown = catFilter.size ? challengeData.filter((c) => catFilter.has(c.category)) : challengeData;
+  if (!shown.length) {
+    list.replaceChildren(el("div", { className: "empty", textContent: "No challenges in this category." }));
+    return;
+  }
   const order = { in_progress: 0, unsolved: 1, solved: 2 };
-  const sorted = [...challengeData].sort((a, b) => order[a.status] - order[b.status]);
+  const sorted = [...shown].sort((a, b) => order[a.status] - order[b.status]);
   if (chalSort === "points") sorted.sort((a, b) => b.points - a.points); // stable: ties keep default order
-  // Tabbing between points inputs re-renders the list; keep focus on the input the user moved to.
-  const focused = document.activeElement && document.activeElement.dataset.chal;
+  // Tabbing between row inputs re-renders the list; keep focus on the input the user moved to.
+  const active = document.activeElement;
+  const focused = active && active.dataset.chal && `input[data-chal="${CSS.escape(active.dataset.chal)}"][data-field="${active.dataset.field}"]`;
   list.replaceChildren(...sorted.map(renderChallenge));
-  if (focused) list.querySelector(`input[data-chal="${CSS.escape(focused)}"]`)?.focus();
+  if (focused) list.querySelector(focused)?.focus();
 }
 
 async function refreshScore() {
@@ -705,8 +738,22 @@ $("chalSort").onchange = () => { chalSort = $("chalSort").value; renderChallenge
 function renderChallenge(c) {
   const meta = el("div", { className: "meta" },
     el("span", { className: `badge ${c.status}`, textContent: (c.status === "solved" ? "✓ " : "") + c.status.replace("_", " ") }));
-  if (c.category) meta.append(el("span", { className: "tag", textContent: c.category }));
-  meta.append(el("span", { className: "spacer" }));
+  // Category: free text, saved on blur or Enter through the category route.
+  const cat = el("input", { className: "cat", maxLength: 64, value: c.category, placeholder: "Category" });
+  cat.dataset.chal = c.id;
+  cat.dataset.field = "cat";
+  cat.setAttribute("aria-label", `Category for ${c.name}`);
+  cat.onkeydown = (ev) => { if (ev.key === "Enter") cat.blur(); };
+  cat.onblur = guard(async () => {
+    const value = cat.value.trim();
+    if (value === c.category) return;
+    try {
+      await api(`/api/challenges/${c.id}/category`, { method: "PATCH", json: { category: value } });
+    } finally {
+      await refreshChallenges();
+    }
+  });
+  meta.append(cat, el("span", { className: "spacer" }));
   // Forward-only: only the next statuses are ever offered.
   for (const next of NEXT[c.status]) {
     meta.append(el("button", { textContent: LABEL[next], onclick: guard(async () => {
@@ -731,6 +778,7 @@ function renderChallenge(c) {
   // Points (0 = unset): saved on blur or Enter through the score route.
   const pts = el("input", { className: "pts", type: "number", min: 0, max: 9999, step: 1, value: String(c.points), title: "Points (0 = unset)" });
   pts.dataset.chal = c.id;
+  pts.dataset.field = "pts";
   pts.setAttribute("aria-label", `Points for ${c.name}`);
   pts.onkeydown = (ev) => { if (ev.key === "Enter") pts.blur(); };
   pts.onblur = guard(async () => {
