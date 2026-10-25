@@ -126,6 +126,20 @@
   .chal .meta .spacer { flex: 1; }
   .chal .ctimer { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .chal .ctimer.running { color: var(--crimson-hi); }
+  .chal .notes { margin-top: 6px; font-size: 12px; padding: 2px 6px; }
+  /* Keyboard selection (j/k): existing palette only. */
+  .chal.selected { outline: 1px solid var(--crimson-hi); outline-offset: -1px; }
+
+  /* Shortcut panel (?): inline overlay, not modal; the page stays usable behind it. */
+  #shortcutPanel {
+    position: fixed; top: 64px; right: 16px; z-index: 5; max-width: calc(100vw - 32px);
+    background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--crimson);
+    border-radius: 4px; padding: 10px 14px;
+  }
+  #shortcutPanel[hidden] { display: none; }
+  #shortcutPanel h2 { margin: 0 0 6px; }
+  #shortcutPanel td { padding: 2px 8px 2px 0; font-size: 13px; }
+  #shortcutPanel td:first-child { font-family: var(--mono); color: var(--crimson-hi); white-space: nowrap; }
 
   /* Timer */
   .clock { font-family: var(--mono); font-size: 48px; font-weight: 700; text-align: center; letter-spacing: .04em; padding: 8px 0; }
@@ -461,6 +475,11 @@
   </div>
 </div>
 
+<div id="shortcutPanel" aria-label="Keyboard shortcuts" hidden>
+  <h2>Keyboard shortcuts</h2>
+  <table><tbody id="shortcutRows"></tbody></table>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -621,7 +640,7 @@ $("openSessions").onclick = guard(openLaunch);
 $("closeLaunch").onclick = closeLaunch;
 $("showNewSession").onclick = showNewSession;
 $("backToPicker").onclick = guard(openLaunch);
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("launch").hidden) closeLaunch(); });
+// Escape closes the overlay: handled by the one keydown listener (Keyboard shortcuts, below).
 $("newSessionName").oninput = () => {
   $("startSession").disabled = !$("newSessionName").value.trim();
   $("newSessionError").textContent = "";
@@ -676,6 +695,7 @@ let challengeData = [];
 let chalSort = "default"; // UI state only: never stored, never sent to the server
 let catFilter = new Set(); // selected category chips (OR); empty = All. UI state only, like chalSort
 let categories = []; // from /api/session/categories — the server owns the list
+let selectedId = null; // keyboard selection (j/k). UI state only, like chalSort: never stored, never sent
 
 async function refreshChallenges() {
   const [{ challenges, tally }, cats] = await Promise.all([api("/api/challenges"), api("/api/session/categories")]);
@@ -706,6 +726,15 @@ function renderCatFilter() {
     })));
 }
 
+// The challenges as drawn: category filter, then sort. j/k walk this same order.
+function displayOrder() {
+  const shown = catFilter.size ? challengeData.filter((c) => catFilter.has(c.category)) : challengeData;
+  const order = { in_progress: 0, unsolved: 1, solved: 2 };
+  const sorted = [...shown].sort((a, b) => order[a.status] - order[b.status]);
+  if (chalSort === "points") sorted.sort((a, b) => b.points - a.points); // stable: ties keep default order
+  return sorted;
+}
+
 function renderChallengeList() {
   renderCatFilter();
   const list = $("challengeList");
@@ -713,17 +742,14 @@ function renderChallengeList() {
     list.replaceChildren(el("div", { className: "empty", textContent: "No challenges yet." }));
     return;
   }
-  const shown = catFilter.size ? challengeData.filter((c) => catFilter.has(c.category)) : challengeData;
-  if (!shown.length) {
+  const sorted = displayOrder();
+  if (!sorted.length) {
     list.replaceChildren(el("div", { className: "empty", textContent: "No challenges in this category." }));
     return;
   }
-  const order = { in_progress: 0, unsolved: 1, solved: 2 };
-  const sorted = [...shown].sort((a, b) => order[a.status] - order[b.status]);
-  if (chalSort === "points") sorted.sort((a, b) => b.points - a.points); // stable: ties keep default order
-  // Tabbing between row inputs re-renders the list; keep focus on the input the user moved to.
+  // Tabbing between row fields re-renders the list; keep focus on the field the user moved to.
   const active = document.activeElement;
-  const focused = active && active.dataset.chal && `input[data-chal="${CSS.escape(active.dataset.chal)}"][data-field="${active.dataset.field}"]`;
+  const focused = active && active.dataset.chal && `[data-chal="${CSS.escape(active.dataset.chal)}"][data-field="${active.dataset.field}"]`;
   list.replaceChildren(...sorted.map(renderChallenge));
   if (focused) list.querySelector(focused)?.focus();
 }
@@ -762,13 +788,7 @@ function renderChallenge(c) {
   clock.dataset.started = c.challenge_timer_started_at || "";
   drawChallengeTimer(clock);
   // Not "Start": that label already belongs to the status button (unsolved → in progress).
-  const timerBtn = el("button", { className: "ghost", textContent: running ? "■ Stop" : "▶ Timer", onclick: guard(async () => {
-    ownSavePending = true; // the server saves immediately on start/stop
-    const state = await api(`/api/challenges/${c.id}/timer/${running ? "stop" : "start"}`, { method: "POST" });
-    c.challenge_time_seconds = state.challenge_time_seconds;
-    c.challenge_timer_started_at = state.challenge_timer_started_at;
-    renderChallengeList();
-  }) });
+  const timerBtn = el("button", { className: "ghost", textContent: running ? "■ Stop" : "▶ Timer", onclick: guard(() => toggleChallengeTimer(c)) });
   timerBtn.setAttribute("aria-label", `${running ? "Stop" : "Start"} timer for ${c.name}`);
   meta.append(cat, clock, timerBtn, el("span", { className: "spacer" }));
   // Forward-only: only the next statuses are ever offered.
@@ -808,11 +828,42 @@ function renderChallenge(c) {
       await refreshChallenges(); // on a rejected value this restores the stored points
     }
   });
-  return el("div", { className: `chal ${c.status}` },
+  // Notes: free text (no trim), saved on blur through the challenge edit route.
+  const notes = el("textarea", { className: "notes", rows: 2, maxLength: 10000, value: c.notes, placeholder: "Notes" });
+  notes.dataset.chal = c.id;
+  notes.dataset.field = "notes";
+  notes.setAttribute("aria-label", `Notes for ${c.name}`);
+  notes.onblur = guard(async () => {
+    if (notes.value === c.notes) return;
+    try {
+      await api(`/api/challenges/${c.id}`, { method: "PATCH", json: { notes: notes.value } });
+    } finally {
+      await refreshChallenges();
+    }
+  });
+  return el("div", { className: `chal ${c.status}` + (c.id === selectedId ? " selected" : "") },
     el("div", { className: "top" },
       el("span", { className: "name", textContent: c.name }),
       pts),
-    meta);
+    meta,
+    notes);
+}
+
+// One code path for the ▶ Timer / ■ Stop button and the t shortcut.
+async function toggleChallengeTimer(c) {
+  const running = !!c.challenge_timer_started_at;
+  ownSavePending = true; // the server saves immediately on start/stop
+  const state = await api(`/api/challenges/${c.id}/timer/${running ? "stop" : "start"}`, { method: "POST" });
+  c.challenge_time_seconds = state.challenge_time_seconds;
+  c.challenge_timer_started_at = state.challenge_timer_started_at;
+  renderChallengeList();
+}
+
+// The s shortcut. Forward-only: solved is never unticked, so an already-solved challenge is a no-op.
+async function markSolved(c) {
+  if (c.status === "solved") return;
+  await api(`/api/challenges/${c.id}/score`, { method: "PATCH", json: { solved: true } });
+  await refreshChallenges();
 }
 
 $("addChallenge").onsubmit = guard(async (ev) => {
@@ -1197,6 +1248,76 @@ $("genForm").onsubmit = async (ev) => {
     $("genSubmit").textContent = "Generate";
   }
 };
+
+/* ---------- Keyboard shortcuts ---------- */
+// One keydown listener owns every shortcut. Shortcuts only call routes the buttons already use.
+const SHORTCUTS = [
+  ["1", "Cockpit tab"], ["2", "Parse tab"], ["3", "Generate tab"],
+  ["j", "Next challenge (wraps)"], ["k", "Previous challenge (wraps)"],
+  ["n", "Notes for the selected challenge"], ["s", "Mark the selected challenge solved"],
+  ["t", "Start/stop the selected challenge's timer"], ["Space", "Start the session timer (if stopped)"],
+  ["?", "Show/hide this panel"], ["Esc", "Close this panel"],
+];
+$("shortcutRows").replaceChildren(...SHORTCUTS.map(([key, action]) =>
+  el("tr", {}, el("td", { textContent: key }), el("td", { textContent: action }))));
+
+function isTyping(node) {
+  return !!node && ["INPUT", "TEXTAREA", "SELECT"].includes(node.tagName);
+}
+
+function toggleShortcutPanel() {
+  $("shortcutPanel").hidden = !$("shortcutPanel").hidden;
+}
+
+function selectedChallenge() {
+  return displayOrder().find((c) => c.id === selectedId);
+}
+
+// dir = 1 (j) or -1 (k). Wraps both ways; a missing selection starts from the first/last row.
+function stepSelection(dir) {
+  const list = displayOrder();
+  if (!list.length) return;
+  const i = list.findIndex((c) => c.id === selectedId);
+  const next = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+  selectedId = list[next].id;
+  renderChallengeList();
+  $("challengeList").querySelector(".chal.selected")?.scrollIntoView({ block: "nearest" });
+}
+
+const onCockpit = (fn) => () => { if (!$("cockpitView").hidden) return fn(); };
+const withSelected = (fn) => onCockpit(() => { const c = selectedChallenge(); if (c) return fn(c); });
+
+const KEYMAP = {
+  "1": () => showTab("cockpit"),
+  "2": () => showTab("parse"),
+  "3": () => showTab("generate"),
+  j: onCockpit(() => stepSelection(1)),
+  k: onCockpit(() => stepSelection(-1)),
+  n: withSelected((c) => $("challengeList").querySelector(`textarea[data-chal="${CSS.escape(c.id)}"]`)?.focus()),
+  s: withSelected(markSolved),
+  t: withSelected(toggleChallengeTimer),
+  // Start only: "start" on a running clock restarts it, and reset stays click-only.
+  Space: onCockpit(() => { if (session && !session.timer.started_at) return updateTimer({ action: "start" }); }),
+  "?": toggleShortcutPanel,
+};
+
+document.addEventListener("keydown", (ev) => {
+  // Escape first: it always fires, even while typing.
+  if (ev.key === "Escape") {
+    $("shortcutPanel").hidden = true;
+    if (!$("launch").hidden) closeLaunch();
+    return;
+  }
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return; // leave browser shortcuts alone
+  if (isTyping(document.activeElement)) return; // typing in category/points/notes never fires a shortcut
+  if (!$("launch").hidden) return; // session picker open
+  const key = ev.key === " " ? "Space" : ev.key;
+  if (key === "Space" && document.activeElement?.tagName === "BUTTON") return; // the browser's own Space = click
+  const action = KEYMAP[key];
+  if (!action) return;
+  ev.preventDefault(); // n must not type an "n" into the notes box it just focused
+  guard(action)();
+});
 
 /* ---------- Boot ---------- */
 guard(async () => {
