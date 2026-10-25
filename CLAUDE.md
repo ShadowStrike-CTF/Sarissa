@@ -363,3 +363,79 @@ Tests (`tests/test_challenge_timer.py`, 169 → 177):
 `test_timer_start_sets_timestamp`, `test_timer_stop_accumulates_seconds`, `test_timer_stop_idempotent`,
 `test_timer_start_idempotent`, `test_timer_get_state`, `test_export_schema_v1_3`,
 `test_timer_independent_of_session_timer`, `test_timer_409_no_session`.
+
+## Phase 14 — Keyboard shortcuts (v1.7.0)
+
+Pure frontend: one `keydown` listener on `document` in `src/sarissa/static/index.html`. No new routes,
+no new stored fields. Shortcuts call only routes the buttons already use.
+
+| Key | Action |
+|---|---|
+| `1` / `2` / `3` | Switch to the Cockpit / Parse / Generate tab |
+| `j` | Select the next challenge (wraps last → first) |
+| `k` | Select the previous challenge (wraps first → last) |
+| `n` | Focus the notes textarea of the selected challenge |
+| `s` | Mark the selected challenge solved (forward-only; no-op if already solved) |
+| `t` | Start/stop the selected challenge's timer (Ph13) |
+| `Space` | Start the session timer if it is stopped (no-op while it runs) |
+| `?` | Open/close the shortcut panel |
+| `Escape` | Close the shortcut panel (and the launch overlay, as before). Always fires |
+
+R-approved deviations from the brief:
+- Tabs are Cockpit / Parse / Generate (there is no Notes tab), so `1`/`2`/`3` map to those.
+- `s` does not toggle. Solved is one-way (Ph11 `/score` returns 409 on `solved: false`), so `s` sends
+  `PATCH /api/challenges/{id}/score {"solved": true}` (plural prefix, as every challenge route) and does
+  nothing on a solved challenge. It never sends `solved: false`.
+- `Space` does not stop. The session timer only has `start` (which restarts a running clock) and `reset`.
+  So Space starts a stopped timer and does nothing while it runs. Reset stays click-only.
+- `n` needed a notes box, and none existed (`notes` was stored and exported, but not editable). Each
+  challenge row gains a notes textarea (≤ 10 000 chars, the existing cap). It saves on blur if changed,
+  through the existing `PATCH /api/challenges/{id} {"notes": ...}`. No trim: notes are free text.
+
+Listener rules (in this order):
+1. `Escape` is handled first, before any focus check. It closes the shortcut panel and the launch
+   overlay (the old launch-overlay Escape listener is folded into the one listener).
+2. Ignored when Ctrl/Meta/Alt is held (browser shortcuts like Ctrl+1 keep working) or on key-repeat.
+3. Ignored when an `<input>`, `<textarea>` or `<select>` has focus. Typing in category/points/notes never
+   fires a shortcut.
+4. Ignored while the launch overlay (session picker) is open.
+5. `Space` is also ignored when a button has focus (the browser's own Space = click).
+6. `j`/`k`/`n`/`s`/`t`/`Space` act only while the Cockpit tab is visible.
+A handled key calls `preventDefault()`, so `n` does not type an "n" into the box it just focused.
+
+Selected challenge:
+- JS variable `selectedId` only. Never stored, never sent to the server.
+- `j`/`k` walk the display order (category filter + sort), the same list the cockpit draws.
+- If the selected challenge is filtered out or deleted, `n`/`s`/`t` do nothing and the next `j`/`k`
+  starts again from the first/last row.
+- Highlight: `.chal.selected` outline in `--crimson-hi`. Existing tokens only.
+
+Shortcut panel `#shortcutPanel`: a fixed inline overlay outside `<main>` (works on every tab). It is not
+modal and not a browser dialog. A two-column table (key | action) built with `el()`/textContent from one
+`SHORTCUTS` array.
+
+Invariants:
+- INV-1: Pure JS keydown listener. No new endpoints. Shortcuts call only existing routes
+  (`/score`, `/timer/start|stop`, `PATCH /api/challenges/{id}` for notes, `PUT /api/session/timer`).
+- INV-2: Every shortcut except `Escape` is suppressed while an input/textarea/select has focus.
+- INV-3: Selected challenge state is frontend-only. Never sent to the server, never in browser storage.
+- INV-4: No browser dialogs. The shortcut panel is a textContent overlay.
+- INV-5: `Escape` always fires, focus or not.
+- INV-6: `j`/`k` wrap in both directions.
+- INV-7: No new colours. The selected highlight uses the existing palette.
+
+What NOT to do:
+- ❌ Browser dialogs (no window dialogs of any kind). Use the inline overlay.
+- ❌ innerHTML in the shortcut panel (or anywhere). textContent only
+- ❌ New backend endpoints. Ph14 is frontend-only
+- ❌ Persist the selected challenge, server-side or in browser storage
+- ❌ Suppress `Escape`
+- ❌ Send `solved: false`, send the session timer `start` while it runs, or `reset` from a key
+- ❌ A second `keydown` listener on `document`. One listener owns every shortcut
+
+Tests (`tests/test_shortcuts.py`, 177 → 187). Same pattern as the other UI tests (TestClient GET `/` and
+check the JS in the page). The suite has no headless browser and CI only installs Python:
+`test_shortcut_panel_toggle`, `test_escape_closes_panel`, `test_escape_always_fires`,
+`test_shortcut_suppressed_in_input`, `test_j_k_navigation_wraps`, `test_s_marks_solved`,
+`test_t_starts_stops_timer`, `test_n_focuses_notes`, `test_space_starts_session_timer_only_when_stopped`,
+`test_selection_frontend_only`.
