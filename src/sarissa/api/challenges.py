@@ -63,6 +63,67 @@ def compute_categories(challenges: Iterable[dict[str, Any]]) -> list[str]:
     return sorted({c["category"] for c in challenges} - {""})
 
 
+UNCATEGORISED = "Uncategorised"
+
+
+def live_seconds(challenge: dict[str, Any], now: str) -> int:
+    """Banked time plus the running stretch up to `now`. Reads only: never banks or stops."""
+    started = challenge["challenge_timer_started_at"]
+    if started is None:
+        return challenge["challenge_time_seconds"]
+    elapsed = (parse_utc(now) - parse_utc(started)).total_seconds()
+    return challenge["challenge_time_seconds"] + max(0, int(elapsed))
+
+
+def _points_per_hour(earned: int, seconds: int) -> float | None:
+    return round(earned / (seconds / 3600), 2) if seconds else None  # 0 s → null, never a ZeroDivisionError
+
+
+def _rollup(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    # points == 0 means unset (Ph11), so only scored challenges add points.
+    scored = [r for r in rows if r["points"] > 0]
+    time_seconds = sum(r["time_seconds"] for r in rows)
+    earned = sum(r["points"] for r in scored if r["solved"])
+    return {
+        "challenges": len(rows),
+        "solved": sum(1 for r in rows if r["solved"]),
+        "time_seconds": time_seconds,
+        "points_earned": earned,
+        "points_available": sum(r["points"] for r in scored),
+        "points_per_hour": _points_per_hour(earned, time_seconds),
+    }
+
+
+def compute_review(challenges: Iterable[dict[str, Any]], now: str) -> dict[str, Any]:
+    """Post-competition review: derived from the session, never stored."""
+    rows = sorted(
+        (
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "category": c["category"] or UNCATEGORISED,
+                "status": c["status"],
+                "time_seconds": live_seconds(c, now),
+                "points": c["points"],
+                "solved": c["status"] == Status.SOLVED.value,
+                "running": c["challenge_timer_started_at"] is not None,
+            }
+            for c in challenges
+        ),
+        key=lambda r: (-r["time_seconds"], r["name"]),
+    )
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        groups.setdefault(r["category"], []).append(r)
+    by_category = sorted(
+        ({"category": name, **_rollup(items)} for name, items in groups.items()),
+        key=lambda g: (-g["time_seconds"], g["category"]),
+    )
+    totals = _rollup(rows)
+    totals["unsolved_time_seconds"] = sum(r["time_seconds"] for r in rows if not r["solved"])
+    return {"generated_utc": now, "totals": totals, "by_category": by_category, "by_challenge": rows}
+
+
 # --- API -------------------------------------------------------------------
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
@@ -251,3 +312,12 @@ def session_score(manager: SessionManager = Depends(get_manager)) -> dict[str, i
 @score_router.get("/categories")
 def session_categories(manager: SessionManager = Depends(get_manager)) -> list[str]:
     return compute_categories(_challenges(manager))
+
+
+# GET /api/review: read-only. No save, no timer mutation; a running timer counts live to now.
+review_router = APIRouter(prefix="/api/review", tags=["challenges"])
+
+
+@review_router.get("")
+def session_review(manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
+    return compute_review(_challenges(manager), utc_now())

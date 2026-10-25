@@ -141,6 +141,25 @@
   #shortcutPanel td { padding: 2px 8px 2px 0; font-size: 13px; }
   #shortcutPanel td:first-child { font-family: var(--mono); color: var(--crimson-hi); white-space: nowrap; }
 
+  /* Review panel (r): same inline overlay as the shortcut panel. Plain CSS bars, palette tokens only. */
+  #reviewPanel {
+    position: fixed; top: 64px; left: 16px; right: 16px; z-index: 5; max-width: 900px; max-height: calc(100vh - 96px);
+    overflow: auto; margin: 0 auto; background: var(--surface); border: 1px solid var(--border);
+    border-top: 3px solid var(--crimson); border-radius: 4px; padding: 10px 14px;
+  }
+  #reviewPanel[hidden] { display: none; }
+  #reviewPanel h2 { margin: 10px 0 6px; }
+  #reviewPanel h2:first-child { margin-top: 0; }
+  #reviewPanel table { width: 100%; border-collapse: collapse; }
+  #reviewPanel th { text-align: left; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px 2px 0; }
+  #reviewPanel td { padding: 2px 8px 2px 0; font-size: 13px; }
+  #reviewPanel td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #reviewPanel tr.solved td { color: var(--muted); }
+  .review-totals { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+  .review-totals b { font-family: var(--mono); color: var(--crimson-hi); font-variant-numeric: tabular-nums; }
+  .bar { background: var(--border); height: 8px; min-width: 80px; border-radius: 2px; }
+  .bar > div { background: var(--crimson); height: 100%; border-radius: 2px; }
+
   /* Timer */
   .clock { font-family: var(--mono); font-size: 48px; font-weight: 700; text-align: center; letter-spacing: .04em; padding: 8px 0; }
   .clock.overtime { color: var(--crimson-hi); }
@@ -267,6 +286,7 @@
     <span class="saved" id="savedAt" aria-live="polite"></span>
     <button class="ghost" id="openSessions">Sessions</button>
     <button id="saveSession">Save</button>
+    <button class="ghost" id="reviewBtn" aria-controls="reviewPanel">Review</button>
     <button class="ghost" id="exportSession">Export JSON</button>
     <span class="saved" id="exportStatus" aria-live="polite"></span>
   </div>
@@ -478,6 +498,17 @@
 <div id="shortcutPanel" aria-label="Keyboard shortcuts" hidden>
   <h2>Keyboard shortcuts</h2>
   <table><tbody id="shortcutRows"></tbody></table>
+</div>
+
+<div id="reviewPanel" aria-label="Post-competition review" hidden>
+  <h2>Review</h2>
+  <div class="review-totals" id="reviewTotals"></div>
+  <h2>By category</h2>
+  <table><thead><tr><th>Category</th><th>Time</th><th></th><th>Solved</th><th>Points</th><th>Pts/h</th></tr></thead>
+    <tbody id="reviewCategories"></tbody></table>
+  <h2>By challenge</h2>
+  <table><thead><tr><th>Challenge</th><th>Category</th><th>Status</th><th>Time</th><th>Points</th></tr></thead>
+    <tbody id="reviewChallenges"></tbody></table>
 </div>
 
 <div id="toast"></div>
@@ -1249,6 +1280,42 @@ $("genForm").onsubmit = async (ev) => {
   }
 };
 
+/* ---------- Review ---------- */
+// GET /api/review owns every number here (server-side, read-only); the panel only draws it.
+const fmtSecs = (s) => fmtDuration(s * 1000);
+const fmtRate = (r) => (r === null ? DASH : r.toFixed(2));
+
+function renderReview(data) {
+  const t = data.totals;
+  $("reviewTotals").replaceChildren(...[
+    ["Time", fmtSecs(t.time_seconds)], ["Solved", `${t.solved} / ${t.challenges}`],
+    ["Points", `${t.points_earned} / ${t.points_available}`], ["Pts/h", fmtRate(t.points_per_hour)],
+    ["Time sink (unsolved)", fmtSecs(t.unsolved_time_seconds)],
+  ].map(([label, value]) => el("span", { className: "muted", textContent: `${label} ` }, el("b", { textContent: value }))));
+
+  const most = Math.max(1, ...data.by_category.map((g) => g.time_seconds));
+  const num = (text) => el("td", { className: "num", textContent: text });
+  $("reviewCategories").replaceChildren(...data.by_category.map((g) => {
+    const fill = el("div");
+    fill.style.width = `${(100 * g.time_seconds) / most}%`;
+    return el("tr", {}, el("td", { textContent: g.category }), num(fmtSecs(g.time_seconds)),
+      el("td", {}, el("div", { className: "bar" }, fill)), num(`${g.solved} / ${g.challenges}`),
+      num(`${g.points_earned} / ${g.points_available}`), num(fmtRate(g.points_per_hour)));
+  }));
+  $("reviewChallenges").replaceChildren(...data.by_challenge.map((c) =>
+    el("tr", { className: c.solved ? "solved" : "" }, el("td", { textContent: c.name }),
+      el("td", { textContent: c.category }), el("td", { textContent: c.status.replace("_", " ") }),
+      num(fmtSecs(c.time_seconds) + (c.running ? " ●" : "")), num(String(c.points)))));
+}
+
+// Re-fetched on every open, so a running timer shows its time up to now.
+async function toggleReview() {
+  if (!$("reviewPanel").hidden) { $("reviewPanel").hidden = true; return; }
+  renderReview(await api("/api/review"));
+  $("reviewPanel").hidden = false;
+}
+$("reviewBtn").onclick = guard(toggleReview);
+
 /* ---------- Keyboard shortcuts ---------- */
 // One keydown listener owns every shortcut. Shortcuts only call routes the buttons already use.
 const SHORTCUTS = [
@@ -1256,7 +1323,8 @@ const SHORTCUTS = [
   ["j", "Next challenge (wraps)"], ["k", "Previous challenge (wraps)"],
   ["n", "Notes for the selected challenge"], ["s", "Mark the selected challenge solved"],
   ["t", "Start/stop the selected challenge's timer"], ["Space", "Start the session timer (if stopped)"],
-  ["?", "Show/hide this panel"], ["Esc", "Close this panel"],
+  ["r", "Show/hide the post-competition review"],
+  ["?", "Show/hide this panel"], ["Esc", "Close this panel and the review"],
 ];
 $("shortcutRows").replaceChildren(...SHORTCUTS.map(([key, action]) =>
   el("tr", {}, el("td", { textContent: key }), el("td", { textContent: action }))));
@@ -1298,6 +1366,7 @@ const KEYMAP = {
   t: withSelected(toggleChallengeTimer),
   // Start only: "start" on a running clock restarts it, and reset stays click-only.
   Space: onCockpit(() => { if (session && !session.timer.started_at) return updateTimer({ action: "start" }); }),
+  r: toggleReview,
   "?": toggleShortcutPanel,
 };
 
@@ -1305,6 +1374,7 @@ document.addEventListener("keydown", (ev) => {
   // Escape first: it always fires, even while typing.
   if (ev.key === "Escape") {
     $("shortcutPanel").hidden = true;
+    $("reviewPanel").hidden = true;
     if (!$("launch").hidden) closeLaunch();
     return;
   }
