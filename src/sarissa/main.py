@@ -103,6 +103,7 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
     app.state.sessions = manager
     app.include_router(challenges.router)
     app.include_router(challenges.score_router)
+    app.include_router(challenges.review_router)
     app.include_router(tools.router)
     app.include_router(session.router)
 
