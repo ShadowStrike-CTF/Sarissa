@@ -90,11 +90,11 @@ def test_get_session_categories_empty_session(client):
 
 
 def test_export_category_field(client):
-    """Export stays schema v1.0: challenges have carried category since v1.0."""
+    """No category-specific schema bump: challenges have carried category since v1.0."""
     cid = add(client, "disk image")["id"]
     set_category(client, cid, "Forensics")
     data = client.get("/api/export").json()
-    assert data["schema_version"] == "1.0"
+    assert data["schema_version"] == "1.3"
     assert data["challenges"][0]["category"] == "Forensics"
 
 

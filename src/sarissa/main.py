@@ -120,14 +120,15 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/export")
     def export_session() -> Response:
-        """Export the active session as versioned JSON (schema v1.0, Zapis-compatible).
+        """Export the active session as versioned JSON (schema v1.3, Zapis-compatible).
 
         Only data the session actually holds is exported; tool results are stateless and absent.
+        Per-challenge timer: challenge_time_seconds is exported, challenge_timer_started_at is not.
         No active session → NoActiveSession → 409, like every other session route.
         """
         data = manager.require_current()
         payload = {
-            "schema_version": "1.0",
+            "schema_version": "1.3",
             "tool": "Sarissa",
             "session": {
                 "name": data["name"],
@@ -136,7 +137,10 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
                 "exported_at": session.utc_now(),
                 "timer": data["timer"],
             },
-            "challenges": data["challenges"],
+            "challenges": [
+                {k: v for k, v in c.items() if k != "challenge_timer_started_at"}
+                for c in data["challenges"]
+            ],
         }
         # Session names are restricted to [A-Za-z0-9_-], so the filename needs no escaping.
         filename = f"sarissa-{data['name']}-{datetime.now(timezone.utc):%Y%m%d}.json"

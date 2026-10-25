@@ -31,7 +31,7 @@ def test_export_active_session(client):
     date = datetime.now(timezone.utc).strftime("%Y%m%d")
     assert resp.headers["content-disposition"] == f'attachment; filename="sarissa-comp-{date}.json"'
     data = resp.json()
-    assert data["schema_version"] == "1.0"
+    assert data["schema_version"] == "1.3"
     assert data["tool"] == "Sarissa"
 
 
