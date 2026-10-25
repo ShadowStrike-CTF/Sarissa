@@ -245,3 +245,59 @@ Tests (`tests/test_scoring.py`, 151 → 161):
 `test_get_session_score_excludes_zero_value`, `test_export_scoring_fields`,
 `test_score_409_no_session`, `test_patch_score_cannot_unsolve`, `test_patch_score_validation`,
 `test_cockpit_scoring_ui`.
+
+## Phase 12 — Challenge categories + filter bar (v1.5.0)
+
+Field (R-approved): the brief's new field already exists, so nothing new is stored.
+| Field | Stored as | Type | Default | Meaning |
+|---|---|---|---|---|
+| `category` | `category` (since Phase 2) | str ≤ 64 chars | `""` | Free-text category ("Forensics", "Crypto", "OSINT") |
+
+No new fields, no new tables, no session-file migration. Content is not validated: any string,
+empty included, is stored exactly as sent. The only rule is the 64-char cap that create/edit
+already apply, and the new route uses the same cap so all three entry points agree.
+
+Routes:
+- `PATCH /api/challenges/{id}/category` (plural prefix, the same router as every challenge route,
+  not the brief's singular `/api/challenge/`). Body strict, extra forbidden:
+  `{"category": StrictStr ≤ 64}`, required. Returns the challenge as stored.
+  404 unknown id · 409 no session · 422 bad body.
+- `GET /api/session/categories` returns a bare JSON list of the unique non-empty categories,
+  sorted (plain case-sensitive `sorted()`), e.g. `["Crypto", "Forensics", "OSINT"]`. A session with
+  no categories → `[]` (200). 409 no session. Lives on `score_router` in `api/challenges.py`
+  (avoids a session↔challenges cycle).
+
+UI:
+- Per challenge: small text input for the category (replaces the read-only tag). Saves on
+  blur/Enter through the category PATCH. textContent only.
+- Filter bar `#catFilter` under the Challenges heading: an "All" chip plus one chip per category
+  from `GET /api/session/categories`. "All" (the default) shows every challenge. Category chips
+  toggle, and selecting several is an OR filter. Hidden when no challenge has a category.
+  JS variable only: no storage, no server state. Tally and score panel stay unfiltered.
+- No innerHTML, no browser dialogs, no green, no transitions or animations.
+
+Export: unchanged. `schema_version` stays `"1.0"`, because challenges have carried `category`
+since v1.0. (The brief's v1.2 bump was dropped for the same reason as Ph11's v1.1 bump: nothing new
+is stored.)
+
+Invariants:
+- INV-1: `category` lives in the existing challenge dict. No new fields or tables.
+- INV-2: `GET /api/session/categories` returns unique non-empty values only. `""` is excluded.
+- INV-3: The filter is frontend-only UI state. The server always returns creation order.
+- INV-4: Category display uses textContent only. No innerHTML with user data.
+- INV-5: The export schema stays v1.0. Zapis Ph6 sees no change.
+- INV-6: Ph11 scoring (`points`, `status`, `/score`) is untouched. Ph1–Ph11 tests stay green.
+
+What NOT to do:
+- ❌ Validate category content (any string goes; only the existing 64-char cap applies)
+- ❌ Trim or normalise category server-side (the frontend trims before sending, like the add form)
+- ❌ Persist filter state, server-side or in browser storage
+- ❌ Show the filter bar when no categories are set
+- ❌ innerHTML with category data (textContent only)
+- ❌ Break Ph11 fields or the test suite
+
+Tests (`tests/test_categories.py`, 161 → 169):
+`test_patch_challenge_category`, `test_patch_challenge_category_empty_string`,
+`test_get_session_categories_returns_sorted_unique`, `test_get_session_categories_excludes_empty`,
+`test_get_session_categories_empty_session`, `test_export_category_field`,
+`test_category_409_no_session`, `test_cockpit_category_ui`.
