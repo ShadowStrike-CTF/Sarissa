@@ -189,7 +189,7 @@ def test_generate_tab_renders(html):
 def test_generate_form(html):
     view = generate_view(html)
     template = re.search(r'<select id="genTemplate">(.*?)</select>', view, re.S).group(1)
-    assert re.findall(r'value="(\w+)"', template) == ["android", "filesystem", "evidence"]
+    assert re.findall(r'value="(\w+)"', template) == ["android", "filesystem", "evidence", "browser", "evtx", "ios"]
     assert re.search(r'<input id="genSeed"[^>]*type="number"[^>]*value="42"', view)
     difficulty = re.search(r'<select id="genDifficulty">(.*?)</select>', view, re.S).group(1)
     assert re.findall(r'value="(\d)"', difficulty) == ["1", "2", "3"]
