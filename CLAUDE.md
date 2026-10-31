@@ -125,7 +125,7 @@ Poligon contract (verified against poligon main 09cda1e):
 Sarissa routes:
 - `GET /api/health` → `{"status": "ok"}` (G.0 gate target).
 - `POST /api/generate` — strict JSON body (pydantic, strict mode, extra forbidden):
-  template ∈ android | filesystem | evidence; seed = int (not bool/str/float); difficulty = int 1–3
+  template ∈ the six Poligon 1.3.2 templates (see v1.8.1); seed = int (not bool/str/float); difficulty = int 1–3
   (not bool). Non-JSON content type → 422 (blocks cross-site simple-POST CSRF).
   Two calls to Poligon (generate, then download); returns the zip as `application/zip` with
   `Content-Disposition: attachment; filename="<template>_<seed>_d<difficulty>.zip"`.
@@ -497,3 +497,19 @@ Tests (`tests/test_review.py`, 187 → 196). Fixtures copied from `tests/test_ch
 `test_review_running_timer_counts_live`, `test_review_does_not_mutate_session`,
 `test_review_unsolved_time_sink`, `test_review_409_no_session`, `test_export_schema_unchanged_1_3`,
 `test_review_ui_static` (r in SHORTCUTS/KEYMAP, `#reviewPanel` present, no innerHTML/localStorage/sessionStorage).
+
+## v1.8.1 — Generate templates + short-run pts/h
+
+Allowlist (D1): `GenerateRequest.template` in `main.py` = Poligon 1.3.2's `TEMPLATES`
+(`src/poligon/core/generate.py`), exactly: `android`, `filesystem`, `evidence`, `browser`, `evtx`, `ios`.
+A static `PoligonTemplate` Literal with a comment naming the Poligon version it mirrors. Sarissa never
+imports Poligon. When Poligon adds a template, update the Literal, the picker and this list together.
+
+Picker labels (D3, wording from Poligon's CLAUDE.md): the first three keep their raw names; the new three are
+`browser` → "Browser (Chrome History)", `evtx` → "Windows Event Logs (EVTX, JSON export)",
+`ios` → "iOS full file system (FFS)". Option values are the template names.
+
+pts/h (D2): the review UI shows "—" for pts/h when `time_seconds < 60` (`PPH_MIN_SECONDS` in `index.html`,
+totals and per category). Display only: `/api/review` is unchanged and still returns the number.
+
+Version 1.8.0 → 1.8.1. Tests 196 → 203 (`tests/test_v181.py`; `test_generate_form` now expects six).
