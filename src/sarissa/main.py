@@ -44,11 +44,15 @@ def poligon_client(timeout: float) -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url=POLIGON_URL, timeout=timeout)
 
 
+# Mirrors Poligon 1.3.2 TEMPLATES (src/poligon/core/generate.py). Static copy: Sarissa never imports Poligon.
+PoligonTemplate = Literal["android", "filesystem", "evidence", "browser", "evtx", "ios"]
+
+
 class GenerateRequest(BaseModel):
     # Strict: rejects true/"42"/4.0 — bool would otherwise pass as an int.
     model_config = ConfigDict(strict=True, extra="forbid")
 
-    template: Literal["android", "filesystem", "evidence"]
+    template: PoligonTemplate
     seed: StrictInt
     difficulty: Annotated[StrictInt, Field(ge=1, le=3)]
 
