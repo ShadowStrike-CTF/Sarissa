@@ -447,6 +447,9 @@
           <option value="android">android</option>
           <option value="filesystem">filesystem</option>
           <option value="evidence">evidence</option>
+          <option value="browser">Browser (Chrome History)</option>
+          <option value="evtx">Windows Event Logs (EVTX, JSON export)</option>
+          <option value="ios">iOS full file system (FFS)</option>
         </select>
         <label for="genSeed">Seed</label>
         <input id="genSeed" class="mono" type="number" step="1" value="42" required>
@@ -1283,13 +1286,16 @@ $("genForm").onsubmit = async (ev) => {
 /* ---------- Review ---------- */
 // GET /api/review owns every number here (server-side, read-only); the panel only draws it.
 const fmtSecs = (s) => fmtDuration(s * 1000);
-const fmtRate = (r) => (r === null ? DASH : r.toFixed(2));
+// Display only: under PPH_MIN_SECONDS a rate is noise (100 pts in 16 s = 22500 pts/h), so show DASH.
+// /api/review still returns the number.
+const PPH_MIN_SECONDS = 60;
+const fmtRate = (r, secs) => (r === null || secs < PPH_MIN_SECONDS ? DASH : r.toFixed(2));
 
 function renderReview(data) {
   const t = data.totals;
   $("reviewTotals").replaceChildren(...[
     ["Time", fmtSecs(t.time_seconds)], ["Solved", `${t.solved} / ${t.challenges}`],
-    ["Points", `${t.points_earned} / ${t.points_available}`], ["Pts/h", fmtRate(t.points_per_hour)],
+    ["Points", `${t.points_earned} / ${t.points_available}`], ["Pts/h", fmtRate(t.points_per_hour, t.time_seconds)],
     ["Time sink (unsolved)", fmtSecs(t.unsolved_time_seconds)],
   ].map(([label, value]) => el("span", { className: "muted", textContent: `${label} ` }, el("b", { textContent: value }))));
 
@@ -1300,7 +1306,7 @@ function renderReview(data) {
     fill.style.width = `${(100 * g.time_seconds) / most}%`;
     return el("tr", {}, el("td", { textContent: g.category }), num(fmtSecs(g.time_seconds)),
       el("td", {}, el("div", { className: "bar" }, fill)), num(`${g.solved} / ${g.challenges}`),
-      num(`${g.points_earned} / ${g.points_available}`), num(fmtRate(g.points_per_hour)));
+      num(`${g.points_earned} / ${g.points_available}`), num(fmtRate(g.points_per_hour, g.time_seconds)));
   }));
   $("reviewChallenges").replaceChildren(...data.by_challenge.map((c) =>
     el("tr", { className: c.solved ? "solved" : "" }, el("td", { textContent: c.name }),
