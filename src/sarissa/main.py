@@ -129,7 +129,7 @@ def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> F
             manager.save()
 
     # docs_url/redoc_url off: Swagger UI pulls assets from a CDN (external network call).
-    app = FastAPI(title="Sarissa", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Sarissa", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.sessions = manager
     app.state.panels = panels
     app.include_router(challenges.router)
