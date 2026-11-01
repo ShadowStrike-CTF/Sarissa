@@ -248,3 +248,128 @@ def test_timestamp_endpoint(client):
     assert r.status_code == 200 and r.json()["iso"] == "1970-01-01T00:00:00Z"
     assert client.post("/api/tools/timestamp", json={"value": "abc", "format": "unix"}).status_code == 422
     assert client.post("/api/tools/timestamp", json={"value": "0", "format": "bogus"}).status_code == 422
+
+
+# --- mutation sweep (J01) ---------------------------------------------------
+
+def test_magic_hex_is_first_16_bytes():
+    assert detect_file_type(PNG)["magic_hex"] == PNG[:16].hex(" ")
+
+
+def test_min_strings_accepts_one():
+    set_min_strings(1)
+    assert tools.get_min_strings() == 1
+    with pytest.raises(ValueError) as exc:
+        set_min_strings(0)
+    assert str(exc.value) == "--min-strings must be at least 1"
+
+
+def test_explicit_min_length_overrides_default():
+    data = b"abcd\x00abcdefgh"
+    assert len(extract_strings(data)["strings"]) == 2
+    assert values(extract_strings(data, min_length=8)) == ["abcdefgh"]
+
+
+def test_truncation_boundary():
+    r = extract_strings(b"aaaa\x00bbbb", limit=2)
+    assert (r["count"], r["truncated"], len(r["strings"])) == (2, False, 2)
+
+
+def test_iso_fractional_seconds():
+    assert convert_timestamp("1970-01-01T00:00:01.250000Z", "iso")["unix"] == 1.25
+
+
+@pytest.mark.parametrize("fmt,iso", [("cocoa", "2001-01-01T00:00:01Z"), ("hfs", "1904-01-01T00:00:01Z")])
+def test_epoch_formats_nonzero(fmt, iso):
+    assert convert_timestamp("1", fmt)["iso"] == iso
+
+
+@pytest.mark.parametrize(
+    "value,fmt,message",
+    [
+        ("abc", "unix", "Not a number: 'abc'"),
+        ("nan", "unix", "Not a finite number: 'nan'"),
+        ("0", "bogus", "Unknown format 'bogus'"),
+        ("99999999999999999", "unix", "Timestamp out of range (years 1-9999)"),
+    ],
+)
+def test_timestamp_error_messages(value, fmt, message):
+    with pytest.raises(ValueError) as exc:
+        convert_timestamp(value, fmt)
+    assert str(exc.value) == message
+
+
+def test_timestamp_number_types_and_human():
+    zero = convert_timestamp("0")  # default format is unix
+    assert zero == convert_timestamp("0", "unix")
+    assert type(zero["unix"]) is int
+    assert zero["human"] == "Thu 01 Jan 1970 00:00:00 UTC"
+    half = convert_timestamp("1.5", "unix")
+    assert half["unix"] == 1.5
+    assert half["unix_ms"] == 1500 and type(half["unix_ms"]) is int
+
+
+# --- main() CLI wiring (uvicorn, browser timer and console are faked) -------
+
+@pytest.fixture
+def launch(monkeypatch):
+    import types
+
+    import sarissa.main
+
+    calls = types.SimpleNamespace(run=None, timer=None, daemon=None, printed=[])
+
+    class FakeTimer:
+        def __init__(self, interval, function, args=None):
+            calls.timer = (interval, function, args)
+            self.daemon = False
+
+        def start(self):
+            calls.daemon = self.daemon
+
+    class FakeConsole:
+        def print(self, *args, **kwargs):
+            calls.printed.append(args)
+
+    def fake_run(*args, **kwargs):
+        calls.run = (args, kwargs)
+
+    monkeypatch.setattr(sarissa.main, "threading", types.SimpleNamespace(Timer=FakeTimer))
+    monkeypatch.setattr(sarissa.main, "uvicorn", types.SimpleNamespace(run=fake_run))
+    monkeypatch.setattr(sarissa.main, "Console", FakeConsole)
+    return calls
+
+
+def test_main_serves_on_port_7331_loopback(launch):
+    import webbrowser
+
+    from fastapi import FastAPI
+
+    import sarissa.main
+
+    set_min_strings(9)
+    sarissa.main.main([])
+    assert tools.get_min_strings() == DEFAULT_MIN_STRINGS
+    (args, kwargs) = launch.run
+    assert len(args) == 1 and isinstance(args[0], FastAPI)
+    assert kwargs == {"host": "127.0.0.1", "port": 7331, "log_level": "warning"}
+    assert launch.timer == (1.0, webbrowser.open, ("http://127.0.0.1:7331",))
+    assert launch.daemon is True
+    assert len(launch.printed) == 3
+
+
+def test_main_min_strings_passthrough(launch):
+    import sarissa.main
+
+    sarissa.main.main(["--min-strings", "6"])
+    assert tools.get_min_strings() == 6
+
+
+def test_main_rejects_min_strings_below_one(launch, capsys):
+    import sarissa.main
+
+    with pytest.raises(SystemExit) as exc:
+        sarissa.main.main(["--min-strings", "0"])
+    assert exc.value.code == 2
+    assert "--min-strings must be at least 1" in capsys.readouterr().err
+    assert launch.run is None
