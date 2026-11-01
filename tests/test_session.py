@@ -272,3 +272,131 @@ def test_session_picker_empty_name(bare_client, tmp_path, body):
 def test_session_name_trimmed(bare_client, tmp_path):
     assert bare_client.post("/api/session", json={"name": "  ductf  "}).json()["name"] == "ductf"
     assert (tmp_path / "ductf.json").is_file()
+
+
+# --- mutation sweep (J01) ---------------------------------------------------
+
+def test_utc_now_is_z_suffixed_utc():
+    import re
+
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", session.utc_now())
+
+
+def test_parse_utc_keeps_offsets_and_assumes_utc():
+    aware = session.parse_utc("2026-01-01T10:00:00+10:00")
+    assert aware.utcoffset() == timedelta(hours=10)
+    assert aware == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert session.parse_utc("2026-01-01T00:00:00").tzinfo == timezone.utc
+
+
+def test_validate_name_message():
+    with pytest.raises(ValueError) as exc:
+        validate_name("../x")
+    assert str(exc.value) == "Invalid session name '../x': use 1-64 letters, digits, '-' or '_'"
+
+
+def test_new_session_data_defaults(monkeypatch):
+    monkeypatch.setattr(session, "utc_now", lambda: "2026-10-01T00:00:00Z")
+    assert session.new_session_data("n") == {
+        "name": "n",
+        "created_at": "2026-10-01T00:00:00Z",
+        "updated_at": "2026-10-01T00:00:00Z",
+        "challenges": [],
+        "timer": {"mode": "countdown", "duration_seconds": 0, "started_at": None},
+    }
+
+
+def test_timer_status_boundaries():
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+    def status(duration):
+        return timer_status({"mode": "countdown", "duration_seconds": duration, "started_at": iso(now)}, now)
+
+    assert status(0) == {"remaining_seconds": None, "urgent": False}
+    assert status(1) == {"remaining_seconds": 1, "urgent": True}
+    assert status(session.URGENT_THRESHOLD) == {"remaining_seconds": 1800, "urgent": False}
+    assert status(session.URGENT_THRESHOLD - 1)["urgent"] is True
+
+
+def test_manager_defaults(tmp_path):
+    assert SessionManager().base_dir == session.SESSIONS_DIR
+    assert SessionManager(tmp_path).last_saved is None
+
+
+def test_session_picker_tie_breaks_on_mtime(bare_client, tmp_path):
+    write_session(tmp_path, "A", "2026-09-25T14:32:00Z")
+    write_session(tmp_path, "B", "2026-09-25T14:32:00Z")
+    os.utime(tmp_path / "A.json", (1_000_000, 1_000_000))
+    os.utime(tmp_path / "B.json", (2_000_000, 2_000_000))
+    rows = bare_client.get("/api/session/recent").json()["sessions"]
+    assert [r["name"] for r in rows] == ["B", "A"]
+
+
+def test_session_picker_full_tie(bare_client, tmp_path):
+    for name in ("A", "B"):
+        write_session(tmp_path, name, "2026-09-25T14:32:00Z")
+        os.utime(tmp_path / f"{name}.json", (1_000_000, 1_000_000))
+    rows = bare_client.get("/api/session/recent").json()["sessions"]
+    assert sorted(r["name"] for r in rows) == ["A", "B"]
+
+
+def test_session_error_details(bare_client):
+    assert bare_client.get("/api/session").json()["detail"] == "No active session"
+    assert bare_client.post("/api/session/nope/load").json()["detail"] == "Session 'nope' not found"
+    bare_client.post("/api/session", json={"name": "comp"})
+    assert bare_client.post("/api/session", json={"name": "comp"}).json()["detail"] == "Session 'comp' already exists"
+
+
+def test_load_tolerates_missing_challenges_key(tmp_path):
+    data = session.new_session_data("bare")
+    del data["challenges"]
+    (tmp_path / "bare.json").write_text(json.dumps(data))
+    assert "challenges" not in SessionManager(tmp_path).load("bare")
+
+
+def test_load_backfills_challenge_timer_fields(tmp_path):
+    data = session.new_session_data("old")
+    data["challenges"] = [{"id": "1", "name": "n"}]
+    (tmp_path / "old.json").write_text(json.dumps(data))
+    loaded = SessionManager(tmp_path).load("old")["challenges"][0]
+    assert loaded == {"id": "1", "name": "n", "challenge_time_seconds": 0, "challenge_timer_started_at": None}
+
+
+def test_load_sets_last_saved_from_file(tmp_path):
+    write_session(tmp_path, "x", "2026-09-24T09:00:00Z")
+    m = SessionManager(tmp_path)
+    m.load("x")
+    assert m.last_saved == "2026-09-24T09:00:00Z"
+
+
+def test_save_stamps_updated_at(tmp_path, monkeypatch):
+    m = SessionManager(tmp_path)
+    m.create("x")
+    monkeypatch.setattr(session, "utc_now", lambda: "2030-01-01T00:00:00Z")
+    assert m.save() == "2030-01-01T00:00:00Z"
+    on_disk = json.loads((tmp_path / "x.json").read_text())
+    assert on_disk["updated_at"] == m.current["updated_at"] == "2030-01-01T00:00:00Z"
+
+
+def test_save_creates_nested_sessions_dir(tmp_path):
+    m = SessionManager(tmp_path / "a" / "b")
+    m.create("x")
+    assert (tmp_path / "a" / "b" / "x.json").is_file()
+
+
+def test_session_summary_fields(client, tmp_path):
+    body = client.get("/api/session").json()
+    on_disk = json.loads((tmp_path / "comp.json").read_text())
+    assert set(body) == {"name", "created_at", "updated_at", "timer", "last_saved",
+                         "autosave_interval", "urgent_threshold", "server_time"}
+    assert body["created_at"] == on_disk["created_at"]
+    assert body["updated_at"] == body["last_saved"] == on_disk["updated_at"]
+    assert body["autosave_interval"] == 60 and body["urgent_threshold"] == 1800
+    assert body["server_time"].endswith("Z")
+
+
+def test_shutdown_saves_unsaved_changes(tmp_path):
+    with TestClient(create_app(sessions_dir=tmp_path)) as c:
+        c.post("/api/session", json={"name": "comp"})
+        c.app.state.sessions.current["challenges"].append({"id": "mem"})  # in memory only
+    assert json.loads((tmp_path / "comp.json").read_text())["challenges"] == [{"id": "mem"}]

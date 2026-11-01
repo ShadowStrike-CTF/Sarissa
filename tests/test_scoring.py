@@ -158,3 +158,11 @@ def test_cockpit_scoring_ui(bare_client):
     assert 'id="scorePanel"' in header
     assert 'id="chalSort"' in page and "By points (high → low)" in page
     assert "/api/session/score" in page and "/score`" in page
+
+
+def test_score_counts_one_point_challenge(client):
+    # Mutation sweep (J01): points == 1 is a real value, only 0 means unset.
+    cid = add(client, points=1)["id"]
+    assert score(client, cid, solved=True).status_code == 200
+    body = client.get("/api/session/score").json()
+    assert (body["total_points"], body["secured_points"], body["remaining_points"]) == (1, 1, 0)
