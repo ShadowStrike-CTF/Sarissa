@@ -93,6 +93,8 @@ def test_no_sarissa_parse_route(tmp_path):
 
 def test_no_treska_in_python():
     for py in SRC.rglob("*.py"):
+        if "_vendor" in py.relative_to(SRC).parts:
+            continue  # v1.9.0 (R-approved): upstream megdan-schema bytes, hash-pinned in test_vendored.py
         assert "treska" not in py.read_text(encoding="utf-8").lower(), py
 
 
