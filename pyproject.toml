@@ -7,12 +7,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sarissa"
-version = "1.9.0"
+version = "1.9.1"
 description = "Rapid-access CTF dashboard for digital forensics competitions. by ShadowStrike."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Strategos", email = "r@strategos.au"}
+    {name = "ShadowStrike", email = "r@strategos.au"}
 ]
 requires-python = ">=3.11"
 classifiers = [
@@ -27,13 +27,13 @@ dependencies = [
     "uvicorn",
     "httpx",
     "pydantic>=2.4",  # vendored megdan-schema (src/sarissa/_vendor) needs StringConstraints
-    "python-magic",
+    "python-magic; sys_platform != 'win32'",  # both ship the `magic` module — never together
     "python-magic-bin; sys_platform == 'win32'",
     "rich",
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "httpx"]
+test = ["pytest", "httpx2"]
 
 [project.scripts]
 sarissa = "sarissa.main:main"
