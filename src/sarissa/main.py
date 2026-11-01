@@ -17,7 +17,7 @@ import webbrowser
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, AsyncIterator, Literal
+from typing import Annotated, Any, AsyncIterator, Iterable, Literal
 
 import httpx
 import uvicorn
@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from rich.console import Console
 
+from sarissa import plugins
 from sarissa.api import challenges, session, tools
 
 PORT = 7331  # ALWAYS — no config, no fallback
@@ -87,9 +88,34 @@ def static_dir() -> Path:
     return Path(__file__).parent / "static"
 
 
-def create_app(sessions_dir: Path | None = None) -> FastAPI:
+def build_export(data: dict[str, Any]) -> dict[str, Any]:
+    """The session export payload (schema v1.3, Zapis-compatible). A new dict; ``data`` is untouched.
+
+    Only data the session actually holds is exported; tool results are stateless and absent.
+    Per-challenge timer: challenge_time_seconds is exported, challenge_timer_started_at is not.
+    """
+    return {
+        "schema_version": "1.3",
+        "tool": "Sarissa",
+        "session": {
+            "name": data["name"],
+            "created_at": data["created_at"],
+            "updated_at": data["updated_at"],
+            "exported_at": session.utc_now(),
+            "timer": data["timer"],
+        },
+        "challenges": [
+            {k: v for k, v in c.items() if k != "challenge_timer_started_at"}
+            for c in data["challenges"]
+        ],
+    }
+
+
+def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> FastAPI:
     # No session is opened at launch: the browser's launch picker creates or restores one.
     manager = session.SessionManager(sessions_dir)
+    # Panel plugins: loaded once. allow=() (the default) loads nothing — behaviour as without plugins.
+    panels = plugins.load_panels(allow)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -105,6 +131,7 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
     # docs_url/redoc_url off: Swagger UI pulls assets from a CDN (external network call).
     app = FastAPI(title="Sarissa", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.sessions = manager
+    app.state.panels = panels
     app.include_router(challenges.router)
     app.include_router(challenges.score_router)
     app.include_router(challenges.review_router)
@@ -125,28 +152,12 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/export")
     def export_session() -> Response:
-        """Export the active session as versioned JSON (schema v1.3, Zapis-compatible).
+        """Export the active session as versioned JSON (see build_export).
 
-        Only data the session actually holds is exported; tool results are stateless and absent.
-        Per-challenge timer: challenge_time_seconds is exported, challenge_timer_started_at is not.
         No active session → NoActiveSession → 409, like every other session route.
         """
         data = manager.require_current()
-        payload = {
-            "schema_version": "1.3",
-            "tool": "Sarissa",
-            "session": {
-                "name": data["name"],
-                "created_at": data["created_at"],
-                "updated_at": data["updated_at"],
-                "exported_at": session.utc_now(),
-                "timer": data["timer"],
-            },
-            "challenges": [
-                {k: v for k, v in c.items() if k != "challenge_timer_started_at"}
-                for c in data["challenges"]
-            ],
-        }
+        payload = build_export(data)
         # Session names are restricted to [A-Za-z0-9_-], so the filename needs no escaping.
         filename = f"sarissa-{data['name']}-{datetime.now(timezone.utc):%Y%m%d}.json"
         return Response(
@@ -154,6 +165,20 @@ def create_app(sessions_dir: Path | None = None) -> FastAPI:
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @app.get("/api/plugins")
+    def list_plugins() -> list[dict[str, str]]:
+        """Loaded plugins: [{name, version, slot}]. [] when none are allowlisted."""
+        return [p.info() for p in panels]
+
+    @app.get("/api/panels")
+    def get_panels() -> list[dict[str, Any]]:
+        """[{name, data}] per loaded panel, computed now from the current session.
+
+        Read-only: never saves, never touches a timer. Each plugin gets a deep copy of the export.
+        """
+        data = manager.require_current()
+        return plugins.run_panels(build_export(data), panels)
 
     @app.post("/api/generate")
     async def generate_challenge(req: GenerateRequest) -> Response:
@@ -186,17 +211,23 @@ def main(argv: list[str] | None = None) -> None:
         "--min-strings", type=int, default=tools.DEFAULT_MIN_STRINGS,
         help="string extractor minimum length (CLI only, default 4)",
     )
+    parser.add_argument(
+        "--allow-plugin", action="append", default=[], metavar="NAME",
+        help=f"allow a panel plugin (repeatable; added to plugins.allow in {plugins.CONFIG_PATH})",
+    )
     args = parser.parse_args(argv)
 
     try:
         tools.set_min_strings(args.min_strings)
-        app = create_app()
+        app = create_app(allow=[*plugins.read_allowlist(), *args.allow_plugin])
     except ValueError as exc:
         parser.error(str(exc))
 
     console = Console()
     console.print(f"[bold #922b21]SARISSA[/] — CTF dashboard  [dim]by ShadowStrike[/]")
     console.print(f"Sessions in {app.state.sessions.base_dir} — pick or create one in the browser")
+    for p in app.state.panels:
+        console.print(f"Plugin loaded: {p.name} {p.version} ({p.info()['slot']})", markup=False)
     console.print(f"Serving on [bold]{URL}[/]  (Ctrl+C to stop)")
 
     opener = threading.Timer(1.0, webbrowser.open, args=(URL,))

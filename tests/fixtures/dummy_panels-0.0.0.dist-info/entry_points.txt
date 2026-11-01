@@ -1,0 +1,13 @@
+[megdan.sarissa.panels]
+dummy = dummy_panels.good
+dummy-table = dummy_panels.table
+dummy-mutating = dummy_panels.mutating
+dummy-wrong-api = dummy_panels.wrong_api
+dummy-raises = dummy_panels.raises
+dummy-invalid = dummy_panels.invalid
+dummy-nonfinite = dummy_panels.nonfinite
+dummy-badname = dummy_panels.badname
+dummy-baddescribe = dummy_panels.baddescribe
+dummy-missing = dummy_panels.missing
+dummy-broken-import = dummy_panels.broken_import
+dummy-unlisted = dummy_panels.unlisted
