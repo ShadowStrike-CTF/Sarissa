@@ -610,3 +610,14 @@ With no plugins installed or allowlisted, behaviour is exactly v1.8.1.
 - Never save the session or touch timers from `/api/panels`
 - Never write `~/.sarissa/config.toml`
 - Never push a tag
+
+## v1.9.1 — housekeeping
+- pyproject `authors` → ShadowStrike
+- `python-magic` gets `sys_platform != 'win32'` (as Treska): Windows installs only `python-magic-bin`
+  (both ship the `magic` module — never together)
+- Test extra uses `httpx2` (Starlette's TestClient prefers it). `httpx` stays a runtime dependency
+  (the Poligon proxy) and the tests still use `httpx.MockTransport`
+- `/openapi.json` no longer served (`openapi_url=None`, as Treska and Zapis)
+- `sarissa.spec`: dropped `onefile=True` — not an `EXE()` argument, ignored by PyInstaller. One-file
+  comes from passing binaries + datas to `EXE` with no `COLLECT`, which is unchanged
+- Version 1.9.0 → 1.9.1. No tag pushed. Tests unchanged (275)

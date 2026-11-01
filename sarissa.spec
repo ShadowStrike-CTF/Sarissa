@@ -64,5 +64,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     # icon= omitted — no icon required
-    onefile=True,        # single .exe for easy distribution
+    # onefile: binaries + datas passed to EXE above (no COLLECT) — that is what makes it one file
 )
