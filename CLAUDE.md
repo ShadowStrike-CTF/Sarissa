@@ -513,3 +513,98 @@ pts/h (D2): the review UI shows "—" for pts/h when `time_seconds < 60` (`PPH_M
 totals and per category). Display only: `/api/review` is unchanged and still returns the number.
 
 Version 1.8.0 → 1.8.1. Tests 196 → 203 (`tests/test_v181.py`; `test_generate_form` now expects six).
+
+## v1.9.0 — plugin panel slot + vendored megdan-schema
+Wording: follow the neutral-terms rule supplied in task briefs.
+Slot vocabulary only: plugin, extension, panel. Never describe what any particular plugin does —
+in code, docs, tests, commits or PR text.
+
+Spec: Megdan Plugin Interface Spec v0.1.1. Sarissa hosts one of the spec's three slots, the panel.
+The scorer slot on the Sarissa side is deferred to the future practice mode (not in this release).
+With no plugins installed or allowlisted, behaviour is exactly v1.8.1.
+
+### Vendored megdan-schema
+- megdan-schema is not on PyPI; Sarissa vendors a pinned copy of tag v0.1.0
+  (commit b0f182cc807844f875085d95cce2e56562fdfad3) from https://github.com/ShadowStrike-CTF/megdan-schema
+- Path: `src/sarissa/_vendor/megdan_schema/` — every file of `src/megdan_schema/` at that tag, copied
+  byte-for-byte, never edited in place (relative imports make it relocatable)
+- `src/sarissa/_vendor/megdan_schema/VENDORED.txt`: source repo, tag, commit, then one
+  `<sha256>  megdan_schema/<file>` line per file (the output of the repo's `tools/vendor_check.py`).
+  VENDORED.txt itself is not in the hashed set
+- `tests/test_vendored.py` asserts every hash matches and the file set is exactly the listed one
+- Upgrade = re-vendor from a newer tag and update VENDORED.txt in the same commit
+- Dependency: `pydantic>=2.4` declared explicitly (megdan-schema needs it; it previously came in only
+  through fastapi). No other new dependency: discovery is `importlib.metadata`, config is `tomllib`
+- R-approved deviation from "existing suite unchanged": the vendored `manifest.py` names a sibling
+  tool in a field name, so `test_no_treska_in_python` skips `src/sarissa/_vendor/`. The rule still
+  covers all of Sarissa's own code; the hash test proves the vendored files are upstream bytes
+
+### Slot
+- `megdan.sarissa.panels`: `panel(session_export: dict) -> dict` (a megdan-schema `PanelData`:
+  `title` plus either `rows` [{label, value}] or `columns` + `table`; cells str/int/float/null)
+- Every plugin object exposes `PLUGIN_API`, `NAME` ([a-z0-9_-]), `VERSION`, `describe()` ->
+  `{name, version, api, slot}`
+- Input: a deep copy of the export payload (`build_export()`, schema 1.3 — the same dict
+  `GET /api/export` serves). Never a reference to the session
+
+### Loading rules (`src/sarissa/plugins.py`, logger `sarissa.plugins`)
+- LR-1 allowlist: `~/.sarissa/config.toml`, `[plugins]` table, `allow = [...]`; default empty.
+  New file — Sarissa had no config file and never writes this one (read-only, `tomllib`). Missing file
+  = empty allowlist; unreadable/malformed file or a non-list-of-str `allow` = logged warning, empty.
+  CLI `--allow-plugin NAME` (repeatable) is added to the config allowlist. The entry-point name is
+  checked against the allowlist BEFORE the entry point is loaded, so code that is not allowlisted is
+  never imported; after loading, NAME must equal the entry-point name or the plugin is skipped
+- LR-2 API major: `PLUGIN_API` major must equal the vendored `PLUGIN_API` major (`is_api_compatible`);
+  mismatch → logged warning, skipped
+- LR-3 failure isolation: import error, missing attribute, `describe()` not a valid
+  `PluginDescription` (or not matching NAME / VERSION / slot `panel`), exception in `panel()`, or
+  output that is not a valid `PanelData` → logged, that panel skipped, core continues. Output with a
+  non-finite float (NaN/inf) is dropped too — it is not valid JSON
+- LR-4 no plugin code in the browser: plugins return data only, never HTML, JS or CSS
+- Plugins are loaded once, in `create_app(sessions_dir=None, allow=())`. `allow=()` (the default)
+  loads nothing, so every existing `create_app()` call is unchanged
+
+### Routes
+- `GET /api/plugins` → `[{name, version, slot}]` for each loaded plugin; `[]` by default. No session needed
+- `GET /api/panels` → `[{name, data}]`, one per loaded panel whose call succeeded, computed on request
+  from the current session. 409 with no session (existing `NoActiveSession` handler). Read-only, same
+  guarantees as Ph15 review: never calls `manager.save()`, never mutates a timer or a challenge dict
+- `/api/export` is refactored onto `build_export()`; its output is unchanged (schema stays "1.3")
+
+### UI
+- Header tab `Panels` (4th: Cockpit | Parse | Generate | Panels), `#tabPanels` / `#panelsView`.
+  The tab button is hidden unless `GET /api/plugins` (fetched once at startup) lists a panel
+- Opening the tab fetches `GET /api/panels`. Per panel: a section with the panel title and the plugin
+  name (muted); `rows` → two-column label/value table, `columns` + `table` → header row + body rows.
+  null cells show "—". Errors inline in a banner
+- `el()` + `replaceChildren`, textContent only. No innerHTML, no browser storage, no browser dialogs,
+  no green, no transitions or animations. No new shortcut key (1/2/3 unchanged)
+
+### Test plan
+- Dummy panel plugins in `tests/fixtures/dummy_panels/`, plus misbehaving variants (wrong API major,
+  raising, invalid output, non-finite output, mismatched NAME, input-mutating). Registered through a
+  test-only entry point: a committed `dummy_panels-0.0.0.dist-info/entry_points.txt` under
+  `tests/fixtures/`, put on `sys.path` by a test fixture only — pyproject.toml gains no entry points
+- Loads when allowlisted · skipped (never imported) when not · skipped on API mismatch · NAME/describe
+  mismatch skipped · exception isolated · invalid PanelData dropped · non-finite dropped ·
+  `/api/panels` read-only (session file bytes and in-memory challenges unchanged, even when a plugin
+  mutates its input) · 409 with no session · `/api/plugins` `[]` by default and lists a loaded dummy ·
+  config file read / CLI adds / missing + malformed = empty · static check: panel UI textContent only,
+  no innerHTML, no storage
+- `tests/test_vendored.py`: hashes, file set
+- Full existing suite (243) passes; only `test_no_treska_in_python` gains the `_vendor/` skip
+
+### Release
+- Version 1.8.1 → 1.9.0. No tag pushed
+
+### What NOT to do
+- Never edit a vendored file — re-vendor from a tag instead
+- Never import or reference a non-public plugin in tests, docs or code
+- Never describe what a particular plugin does
+- Never load a plugin that is not allowlisted, or import its code to find out its NAME
+- Never pass the session to a plugin by reference — deep copies only
+- Never send plugin-supplied HTML/JS/CSS to the browser, or render plugin data with innerHTML
+- Never let a plugin failure propagate out of the core
+- Never save the session or touch timers from `/api/panels`
+- Never write `~/.sarissa/config.toml`
+- Never push a tag
