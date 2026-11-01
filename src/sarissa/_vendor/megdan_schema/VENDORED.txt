@@ -1,0 +1,17 @@
+# Vendored copy of megdan-schema — do not edit; re-vendor from a tag instead.
+source: https://github.com/ShadowStrike-CTF/megdan-schema
+tag: v0.1.0
+commit: b0f182cc807844f875085d95cce2e56562fdfad3
+# sha256 of every file (output of tools/vendor_check.py at that tag); this file is not hashed
+
+d24e2985e6ee414eb0998521ed33df573cdfb6f825e725df6f765919f8c7dcbf  megdan_schema/__init__.py
+e9b62825e1165f03b8759695b26811948a9268be995330c54dbdb365e6aec9cd  megdan_schema/encoding.py
+b9c3864e22a2ae55f75e3aa6cff2728118a396db92d42119c06d8ca0681e2672  megdan_schema/export.py
+2cd55c5decc55490004ac0bf707069775c7e269d0ce96f9f24505ed129c16b8e  megdan_schema/hashing.py
+6718d5ae4c25ca9eb7b61d21bdc679448ea0d2aa77f58698525220f1200aec1e  megdan_schema/ids.py
+a3477f764d2c8f5970de5c3126ce20d8b2f2ffcfba83730037dba309fc329747  megdan_schema/manifest.py
+9054ce905aeeeef3cd6793b2312479cba2471fb8382df03e34939c5c5b9c90af  megdan_schema/plugin.py
+a08f1674095eaf640f123fbdceb17d00eb081b1eb3f8420a469b90b9555db0b0  megdan_schema/poe.py
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  megdan_schema/py.typed
+bb95950263c9596ef4cc3c75215a5046124ba665638d0e6c1e1ecf999ba7ac75  megdan_schema/rubric.py
+caa3212c898abca1445dc30e9ec4125cb59beb6bfac0de70b9e142af919c0173  megdan_schema/validators.py

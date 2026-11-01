@@ -1,0 +1,2 @@
+# Vendored files are hash-pinned (tests/test_vendored.py): keep LF on every OS.
+src/sarissa/_vendor/** text eol=lf

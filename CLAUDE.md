@@ -533,6 +533,7 @@ With no plugins installed or allowlisted, behaviour is exactly v1.8.1.
   VENDORED.txt itself is not in the hashed set
 - `tests/test_vendored.py` asserts every hash matches and the file set is exactly the listed one
 - Upgrade = re-vendor from a newer tag and update VENDORED.txt in the same commit
+- `.gitattributes` pins `src/sarissa/_vendor/**` to LF, so a Windows checkout keeps the hashes
 - Dependency: `pydantic>=2.4` declared explicitly (megdan-schema needs it; it previously came in only
   through fastapi). No other new dependency: discovery is `importlib.metadata`, config is `tomllib`
 - R-approved deviation from "existing suite unchanged": the vendored `manifest.py` names a sibling
@@ -593,6 +594,7 @@ With no plugins installed or allowlisted, behaviour is exactly v1.8.1.
   no innerHTML, no storage
 - `tests/test_vendored.py`: hashes, file set
 - Full existing suite (243) passes; only `test_no_treska_in_python` gains the `_vendor/` skip
+- Tests: 243 → 275 (`tests/test_plugins.py` 28, `tests/test_vendored.py` 4)
 
 ### Release
 - Version 1.8.1 → 1.9.0. No tag pushed
