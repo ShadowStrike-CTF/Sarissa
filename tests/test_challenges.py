@@ -172,3 +172,13 @@ def test_tally_not_persisted(client, tmp_path):
     data = json.loads((tmp_path / "comp.json").read_text())
     assert "tally" not in data
     assert data["challenges"][0]["status"] == "solved"
+
+
+def test_error_details(client):
+    # Mutation sweep (J01): the UI shows `detail`, so the wording is behaviour.
+    r = client.patch("/api/challenges/nope/score", json={"solved": True})
+    assert (r.status_code, r.json()["detail"]) == (404, "Challenge 'nope' not found")
+    cid = add(client)["id"]
+    set_status(client, cid, "solved")
+    r = set_status(client, cid, "unsolved")
+    assert (r.status_code, r.json()["detail"]) == (409, "Status cannot move backwards: solved → unsolved")

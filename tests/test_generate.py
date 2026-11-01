@@ -223,3 +223,57 @@ def test_no_motion(html, banned):
 
 def test_generate_ui_no_warn_red(html):
     assert "--warn" not in generate_js(html) and "--warn" not in generate_view(html)
+
+
+# --- mutation sweep (J01): factory, timeout, error details ------------------
+
+def test_poligon_client_factory_targets_loopback():
+    import asyncio
+
+    client = sarissa.main.poligon_client(2.5)
+    try:
+        assert (client.base_url.host, client.base_url.port) == ("127.0.0.1", POLIGON_PORT)
+        assert client.timeout == httpx.Timeout(2.5)
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_generate_uses_generate_timeout(client, monkeypatch):
+    timeouts = []
+    real = httpx.AsyncClient
+
+    def factory(timeout):
+        timeouts.append(timeout)
+        return real(base_url=sarissa.main.POLIGON_URL, transport=httpx.MockTransport(happy))
+
+    monkeypatch.setattr(sarissa.main, "poligon_client", factory)
+    assert client.post("/api/generate", json=VALID).status_code == 200
+    assert timeouts == [sarissa.main.GENERATE_TIMEOUT]
+
+
+def test_generate_error_details(client, poligon):
+    poligon(lambda request: httpx.Response(400, json={"detail": "bad"}))
+    assert client.post("/api/generate", json=VALID).json()["detail"] == "Poligon error: generate returned HTTP 400"
+
+    poligon(lambda request: httpx.Response(200, json={"scenario_id": "../../etc"}))
+    assert client.post("/api/generate", json=VALID).json()["detail"] == "Poligon error: no scenario id in response"
+
+    poligon(lambda request: happy(request) if request.method == "POST" else httpx.Response(404))
+    assert client.post("/api/generate", json=VALID).json()["detail"] == "Poligon error: download returned HTTP 404"
+
+    poligon(raising(httpx.ReadTimeout))
+    assert client.post("/api/generate", json=VALID).json()["detail"] == "Poligon timed out"
+
+
+def test_generate_other_transport_error_is_502(client, poligon):
+    poligon(raising(httpx.ReadError))
+    r = client.post("/api/generate", json=VALID)
+    assert r.status_code == 502
+    assert r.json()["detail"] == "Poligon error: ReadError"
+
+
+def test_static_dir_frozen(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert sarissa.main.static_dir() == tmp_path / "sarissa" / "static"
