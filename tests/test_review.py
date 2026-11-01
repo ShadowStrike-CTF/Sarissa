@@ -183,3 +183,22 @@ def test_review_ui_static(tmp_path):
     assert '$("reviewPanel").hidden = true' in escape
     for banned in ("innerHTML", "localStorage", "sessionStorage", "alert(", "confirm(", "prompt("):
         assert banned not in js
+
+
+# --- mutation sweep (J01) ---------------------------------------------------
+
+def test_review_counts_one_point_challenge(client, clock):
+    cid = add(client, "tiny", "Crypto", 1)
+    spend(client, clock, cid, "2026-10-25T10:00:00Z", "2026-10-25T11:00:00Z")
+    solve(client, cid)
+    body = review(client)
+    cat = body["by_category"][0]
+    assert (cat["points_earned"], cat["points_available"], cat["points_per_hour"]) == (1, 1, 1.0)
+    assert (body["totals"]["points_earned"], body["totals"]["points_available"]) == (1, 1)
+
+
+def test_review_timer_started_this_instant_counts_zero(client, clock):
+    cid = add(client)
+    timer(client, cid, "start")
+    row = review(client)["by_challenge"][0]
+    assert (row["time_seconds"], row["running"]) == (0, True)
