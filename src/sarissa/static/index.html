@@ -49,6 +49,7 @@
   /* ID-level so it beats #cockpitView's display: grid. */
   #cockpitView[hidden], #parseView[hidden] { display: none; }
   #generateView[hidden] { display: none; }
+  #panelsView[hidden], #tabPanels[hidden] { display: none; }
 
   /* Cockpit: challenges ≈20% | timer ≈45% | quick tools ≈35%. Each column scrolls on its own. */
   #cockpitView {
@@ -258,6 +259,13 @@
   /* Generate (Poligon via Sarissa proxy). Crimson tokens only. */
   #generateView { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
   .gen-wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Panels (v1.9.0): plugin data drawn with the generic .ptable pattern. Plugins send data only. */
+  #panelsView { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+  .panels-wrap, #panelsOut { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .panel-head h2 { margin: 0; }
+  .panel-head .muted { font-family: var(--mono); font-size: 12px; }
   .gen-form { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
   .gen-form label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
   .gen-form .actions { grid-column: 1 / -1; }
@@ -278,6 +286,7 @@
     <button class="ghost active" id="tabCockpit" role="tab" aria-selected="true" aria-controls="cockpitView">Cockpit</button>
     <button class="ghost" id="tabParse" role="tab" aria-selected="false" aria-controls="parseView">Parse</button>
     <button class="ghost" id="tabGenerate" role="tab" aria-selected="false" aria-controls="generateView">Generate</button>
+    <button class="ghost" id="tabPanels" role="tab" aria-selected="false" aria-controls="panelsView" hidden>Panels</button>
   </nav>
   <div class="session-bar">
     <span class="muted">Session</span>
@@ -473,6 +482,14 @@
         <a id="genAgain" href="#">Download again</a>
       </div>
     </section>
+  </div>
+</main>
+
+<!-- PANELS: data from allowlisted panel plugins (GET /api/panels). The tab is hidden unless one is loaded. -->
+<main id="panelsView" role="tabpanel" aria-labelledby="tabPanels" hidden>
+  <div class="panels-wrap">
+    <div class="banner" id="panelsError" role="alert" hidden></div>
+    <div id="panelsOut"></div>
   </div>
 </main>
 
@@ -1048,7 +1065,10 @@ const DASH = "—";
 const orDash = (v) => (v === null || v === undefined || v === "") ? DASH : String(v);
 let parseResult = null;
 
-const TABS = { cockpit: ["tabCockpit", "cockpitView"], parse: ["tabParse", "parseView"], generate: ["tabGenerate", "generateView"] };
+const TABS = {
+  cockpit: ["tabCockpit", "cockpitView"], parse: ["tabParse", "parseView"], generate: ["tabGenerate", "generateView"],
+  panels: ["tabPanels", "panelsView"],
+};
 
 function showTab(name) {
   for (const [key, [tab, view]] of Object.entries(TABS)) {
@@ -1059,6 +1079,7 @@ function showTab(name) {
   }
   if (name === "parse") treskaStatus();
   if (name === "generate") guard(poligonStatus)();
+  if (name === "panels") loadPanels();
 }
 for (const [key, [tab]] of Object.entries(TABS)) $(tab).onclick = () => showTab(key);
 
@@ -1321,6 +1342,44 @@ async function toggleReview() {
   $("reviewPanel").hidden = false;
 }
 $("reviewBtn").onclick = guard(toggleReview);
+
+/* ---------- Panels (plugin slot, v1.9.0) ---------- */
+// Plugins return data only (title + rows, or columns + table), validated server-side as PanelData.
+// Everything they send is drawn via el()/textContent — never markup, never script.
+const cell = (v, tag = "td") => el(tag, { className: typeof v === "number" ? "num" : "", textContent: orDash(v) });
+
+function renderPanel({ name, data }) {
+  const head = el("div", { className: "panel-head" },
+    el("h2", { textContent: data.title }), el("span", { className: "muted", textContent: name }));
+  const table = data.rows
+    ? el("table", { className: "ptable" }, el("tbody", {},
+        ...data.rows.map((r) => el("tr", {}, cell(r.label, "th"), cell(r.value)))))
+    : el("table", { className: "ptable" },
+        el("thead", {}, el("tr", {}, ...data.columns.map((c) => cell(c, "th")))),
+        el("tbody", {}, ...data.table.map((row) => el("tr", {}, ...row.map((v) => cell(v))))));
+  return el("section", {}, head, el("div", { className: "scroll" }, table));
+}
+
+// Computed on request from the current session (GET /api/panels is read-only).
+async function loadPanels() {
+  const err = $("panelsError");
+  try {
+    const panels = await api("/api/panels");
+    err.hidden = true;
+    $("panelsOut").replaceChildren(...(panels.length
+      ? panels.map(renderPanel)
+      : [el("div", { className: "empty", textContent: "No panel data." })]));
+  } catch (e) {
+    err.textContent = `Panels unavailable: ${e.message}`;
+    err.hidden = false;
+  }
+}
+
+// The plugin set is fixed for the server's lifetime, so one check at boot decides the tab.
+guard(async () => {
+  const loaded = await api("/api/plugins");
+  $("tabPanels").hidden = !loaded.some((p) => p.slot === "panel");
+})();
 
 /* ---------- Keyboard shortcuts ---------- */
 // One keydown listener owns every shortcut. Shortcuts only call routes the buttons already use.
