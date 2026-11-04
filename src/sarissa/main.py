@@ -23,6 +23,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from rich.console import Console
 
@@ -137,6 +138,8 @@ def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> F
     app.include_router(challenges.review_router)
     app.include_router(tools.router)
     app.include_router(session.router)
+    # F02: outermost layer (added last = checked first). Loopback Host headers only.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
     @app.exception_handler(session.NoActiveSession)
     def no_active_session(request: Request, exc: session.NoActiveSession) -> JSONResponse:
