@@ -1,6 +1,6 @@
 # Sarissa — CTF Dashboard
 Rapid-access CTF dashboard for digital forensics competitions.
-by ShadowStrike. MIT.
+by ShadowStrike. Proprietary — all rights reserved.
 
 ## Tech stack
 - Python 3.11
@@ -621,3 +621,12 @@ With no plugins installed or allowlisted, behaviour is exactly v1.8.1.
 - `sarissa.spec`: dropped `onefile=True` — not an `EXE()` argument, ignored by PyInstaller. One-file
   comes from passing binaries + datas to `EXE` with no `COLLECT`, which is unchanged
 - Version 1.9.0 → 1.9.1. No tag pushed. Tests unchanged (275)
+
+## F04 — licence: MIT → Proprietary
+- LICENSE: all rights reserved, no reproduction/distribution without ShadowStrike's written permission
+- pyproject: `license = {text = "Proprietary"}`, classifier `License :: Other/Proprietary License`
+- Every package .py carries `# © 2026 ShadowStrike. All rights reserved.` in its header
+  (vendored `_vendor/megdan_schema/` excluded — hash-pinned, never edited)
+- README footer: `© 2026 ShadowStrike. All rights reserved. Aut Viam Inveniam Aut Faciam`
+- MIT releases already on PyPI stay MIT; the proprietary licence applies from this version on
+- Version 1.9.1 → 1.10.0. No tag pushed
