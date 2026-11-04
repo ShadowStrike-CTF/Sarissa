@@ -450,7 +450,7 @@ Scope IN: read-only review computed server-side from the current session; per-ca
 (challenge count, solved count, total time, points earned, points available, points per hour);
 per-challenge table sorted by time desc (category, status, time, points, solved); "time sink" = total
 time on challenges still unsolved; Review panel in the UI.
-Scope OUT: cross-session history, verification-rate metric, Poligon calibration feedback, charts beyond
+Scope OUT: cross-session history, accuracy metric, Poligon calibration feedback, charts beyond
 plain CSS bars.
 
 Invariants (R-approved):
