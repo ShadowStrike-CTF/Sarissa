@@ -1,5 +1,5 @@
 # Sarissa — four DF quick tools: hash, timestamp, file type, strings.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """Digital forensics quick tools.

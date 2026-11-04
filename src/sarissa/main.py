@@ -1,5 +1,5 @@
 # Sarissa — FastAPI app and CLI entry point.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """Run with `sarissa` or `python -m sarissa.main`. Always serves on 127.0.0.1:7331."""

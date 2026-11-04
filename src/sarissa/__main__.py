@@ -1,5 +1,5 @@
 # Sarissa — `python -m sarissa` and PyInstaller entry point.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """Thin wrapper: all launch logic (port 7331, uvicorn, browser open) lives in sarissa.main."""
