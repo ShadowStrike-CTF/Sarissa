@@ -400,3 +400,8 @@ def test_shutdown_saves_unsaved_changes(tmp_path):
         c.post("/api/session", json={"name": "comp"})
         c.app.state.sessions.current["challenges"].append({"id": "mem"})  # in memory only
     assert json.loads((tmp_path / "comp.json").read_text())["challenges"] == [{"id": "mem"}]
+
+
+def test_trusted_host_rejects_external(client):
+    response = client.get("/", headers={"Host": "evil.local"})
+    assert response.status_code == 400
