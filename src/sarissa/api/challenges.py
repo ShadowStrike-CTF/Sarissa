@@ -1,5 +1,5 @@
 # Sarissa — challenge tracking with one-way status.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """Challenge CRUD. Status only ever moves forward: unsolved → in_progress → solved."""

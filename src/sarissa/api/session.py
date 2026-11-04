@@ -1,5 +1,5 @@
 # Sarissa — named session management with 60-second auto-save.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """One JSON file per competition at ~/.sarissa/sessions/<name>.json."""
