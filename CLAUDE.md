@@ -334,6 +334,12 @@ Export → schema `"1.3"` (R-approved; 1.1 and 1.2 never existed because Ph11/Ph
 Challenges gain `challenge_time_seconds`. `challenge_timer_started_at` is stripped from the export.
 Additive: every v1.0 key is unchanged. This supersedes the "stays v1.0" notes in Ph9/Ph11/Ph12.
 
+Zapis compatibility (F01, Zapis 1.3.0): Zapis's Sarissa import accepts `schema_version` `"1.0"` and `"1.3"`,
+and compares `tool` case-insensitively. So Sarissa's current emit (`"1.3"`, `tool: "Sarissa"`) is accepted
+as-is — no Sarissa change needed. An unknown version is imported by Zapis with a logged warning, not
+rejected. Zapis only reads `session.name` and `challenges[].name` / `notes`. A future Sarissa schema bump
+should be paired with adding the version to Zapis's `SCHEMA_VERSIONS` (`src/zapis/core/import_sarissa.py`).
+
 UI:
 - Per challenge: a timer readout (`.ctimer`, mono, HH:MM:SS) plus a start/stop button in the meta row,
   labelled "▶ Timer" / "■ Stop". It is not "Start", because that label already belongs to the status button
