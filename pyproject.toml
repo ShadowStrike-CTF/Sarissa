@@ -7,10 +7,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sarissa"
-version = "1.9.1"
+version = "1.10.0"
 description = "Rapid-access CTF dashboard for digital forensics competitions. by ShadowStrike."
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Proprietary"}
 authors = [
     {name = "ShadowStrike", email = "r@strategos.au"}
 ]
@@ -19,7 +19,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
 ]
 dependencies = [

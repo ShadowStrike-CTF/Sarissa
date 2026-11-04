@@ -1,5 +1,5 @@
 # Sarissa — plugin panel slot (Megdan Plugin Interface Spec v0.1.1).
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 """Discover, load and run panel plugins. Plugins return data only; Sarissa draws it.
