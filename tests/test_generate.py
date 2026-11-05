@@ -1,5 +1,5 @@
 # Sarissa — Phase 8 Generate tab (Poligon proxy). Poligon is mocked at the httpx transport layer.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import json

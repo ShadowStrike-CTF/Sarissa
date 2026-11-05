@@ -1,5 +1,5 @@
 # Sarissa — Phase 7 Parse tab (Treska integration). Sarissa-side HTML/JS only; Treska is not mocked.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import re

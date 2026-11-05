@@ -1,5 +1,5 @@
 # Sarissa — Phase 14 keyboard shortcuts. Sarissa-side HTML/JS only (no headless browser in the suite).
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import re
