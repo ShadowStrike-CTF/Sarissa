@@ -1,6 +1,6 @@
 # Sarissa — v1.8.1: all six Poligon templates in Generate + short-run pts/h display.
 # Poligon is mocked at the httpx transport layer, as in tests/test_generate.py.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import json

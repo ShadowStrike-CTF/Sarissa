@@ -1,5 +1,5 @@
 # Sarissa — Phase 13 per-challenge timer (start/stop/GET, export schema v1.3).
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import json

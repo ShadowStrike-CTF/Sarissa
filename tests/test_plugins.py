@@ -1,5 +1,5 @@
 # Sarissa — v1.9.0 plugin panel slot: loading rules, /api/plugins, /api/panels, Panels tab.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import copy

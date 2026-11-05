@@ -1,5 +1,5 @@
 # Test-only panel plugin fixture (v1.9.0). Shared helpers for the dummy plugins.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 
 PLUGIN_API = "1.0"
 VERSION = "0.0.0"

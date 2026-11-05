@@ -1,5 +1,5 @@
-# Sarissa — Phase 9 session export (GET /api/export, schema v1.0).
-# © 2026 ShadowStrike. MIT License.
+# Sarissa — Phase 9 session export (GET /api/export, schema v1.3).
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 from datetime import datetime, timezone
