@@ -1,5 +1,5 @@
 # Sarissa — Phase 15 post-competition review (GET /api/review, read-only).
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import pytest

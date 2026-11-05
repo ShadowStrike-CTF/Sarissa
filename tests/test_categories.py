@@ -1,5 +1,5 @@
 # Sarissa — Phase 12 challenge categories (PATCH category, GET /api/session/categories, filter bar).
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import json
