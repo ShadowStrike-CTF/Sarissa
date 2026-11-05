@@ -1,5 +1,5 @@
 # Sarissa — v1.9.0 vendored megdan-schema is byte-for-byte the pinned tag.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import hashlib

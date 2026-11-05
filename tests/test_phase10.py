@@ -1,5 +1,5 @@
 # Sarissa — Phase 10: inline favicon + visibility-gated probes. Sarissa-side HTML/JS only.
-# © 2026 ShadowStrike. MIT License.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
 import base64
