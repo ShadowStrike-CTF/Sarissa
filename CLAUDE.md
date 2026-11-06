@@ -653,8 +653,9 @@ Test suite: tests/conftest.py patches TestClient's default base_url to
 "http://127.0.0.1" to match the middleware. If tests fail with 400 Invalid host
 header, check base_url first.
 
-## F14 — Manifest export (v1.11.0) — DESIGN ONLY, not implemented
-Design doc: `docs/F14_manifest_design.md` (awaiting R-approval before Digger fires).
+## F14 — Manifest export (v1.11.0)
+Design doc: `docs/F14_manifest_design.md` (R-approved). Code: `build_manifest()` / `manifest_hash()` /
+`MANIFEST_KEYS` in `main.py`; `__version__` in `src/sarissa/__init__.py` (must equal pyproject).
 - `GET /api/manifest` → `{sarissa_version, exported_at, challenge_count, manifest_hash, challenges}`;
   each challenge = explicit allowlist `{id, name, category, points, solved, solved_at}`
 - No `flag_hash` / no flag field of any kind — Sarissa stores no flags. Never include `notes`
@@ -664,3 +665,4 @@ Design doc: `docs/F14_manifest_design.md` (awaiting R-approval before Digger fir
 - Empty session → 200 `challenge_count: 0`; no active session → 409 (existing handler)
 - Read-only (never saves, never touches timers); `/api/export` schema stays "1.3"
 - Open ABC flag: Zapis imports `/api/export`, not the manifest — Zapis Ph6 doc must be reconciled
+- Tests: 276 → 288 (`tests/test_manifest.py`, 12). No tag pushed

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import json
 import sys
 import threading
@@ -27,7 +28,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from rich.console import Console
 
-from sarissa import plugins
+from sarissa import __version__, plugins
 from sarissa.api import challenges, session, tools
 
 PORT = 7331  # ALWAYS — no config, no fallback
@@ -112,6 +113,40 @@ def build_export(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# F14 manifest: the ONLY keys a manifest challenge may carry (explicit allowlist — never copy the
+# stored dict). No flag field of any kind (Sarissa stores no flags) and never `notes`.
+MANIFEST_KEYS = ("id", "name", "category", "points", "solved", "solved_at")
+
+
+def manifest_hash(items: list[dict[str, Any]]) -> str:
+    """SHA-256 of the canonical JSON of the ordered challenge list (docs/F14_manifest_design.md §6)."""
+    canonical = json.dumps(items, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_manifest(data: dict[str, Any]) -> dict[str, Any]:
+    """The F14 manifest: deterministic, hash-verifiable challenge-set snapshot. ``data`` is untouched."""
+    items = [
+        {
+            "id": c["id"],
+            "name": c["name"],
+            "category": c["category"],
+            "points": c["points"],
+            "solved": c["status"] == challenges.Status.SOLVED.value,
+            "solved_at": c["solved_at"],
+        }
+        for c in data["challenges"]
+    ]
+    items.sort(key=lambda c: (c["category"], c["name"], c["id"]))
+    return {
+        "sarissa_version": __version__,
+        "exported_at": session.utc_now(),
+        "challenge_count": len(items),
+        "manifest_hash": manifest_hash(items),
+        "challenges": items,
+    }
+
+
 def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> FastAPI:
     # No session is opened at launch: the browser's launch picker creates or restores one.
     manager = session.SessionManager(sessions_dir)
@@ -168,6 +203,11 @@ def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> F
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @app.get("/api/manifest")
+    def export_manifest() -> dict[str, Any]:
+        """F14 manifest (see build_manifest). Read-only. No active session → 409."""
+        return build_manifest(manager.require_current())
 
     @app.get("/api/plugins")
     def list_plugins() -> list[dict[str, str]]:

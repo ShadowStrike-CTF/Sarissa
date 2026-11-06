@@ -5,7 +5,7 @@
 | Brief | M/1.1.15 |
 | Tool | Sarissa |
 | Version target | v1.10.1 → **v1.11.0** (MINOR — new API endpoint) |
-| Status | **DESIGN — awaiting R-approval. Not implemented.** |
+| Status | **R-approved and implemented** (v1.11.0, 288 tests green) |
 | Verified HEAD (main) | `73774dc` (merge of PR #23, v1.10.1 after F02) |
 | Test count at HEAD | 276 collected (`pytest --collect-only -q`) |
 | Python | `requires-python >=3.11` (cloud recon ran 3.13) |
@@ -88,10 +88,9 @@ JSON response, not a download; `/api/export` is the download route).
 **Errors**
 - **409** `{"detail": "No active session"}`: no active session (existing app-wide handler).
 - **400**: Host header not 127.0.0.1/localhost (F02, before routing).
-- **500**: unexpected exception. FastAPI/Starlette's default 500 already returns a plain body with no
-  stack trace (debug is off). **R decision (optional):** add a route-local `try/except` returning
-  `JSONResponse({"error": "internal server error"}, 500)` to match the brief's exact body. Recommended:
-  no. Sarissa has no other route-specific 500 handler, and nothing here can realistically raise.
+- **500**: unexpected exception. FastAPI/Starlette's default 500 returns a plain body with no stack
+  trace (debug is off). No route-local handler was added (approved with the doc's recommendation):
+  Sarissa has no other route-specific 500 handler, and nothing here can realistically raise.
 - No 404 and no error for an empty session: 200, `challenge_count: 0`, `challenges: []`.
 
 ## 4. Flag security
@@ -187,8 +186,10 @@ conftest `http://127.0.0.1` base_url).
 | T10 | `test_manifest_trusted_host` | `Host: evil.example` → 400 |
 | T11 | `test_export_unchanged` | `/api/export` still `schema_version == "1.3"` |
 
+| T12 | `test_manifest_hash_worked_example` | the §3 example and `[]` hash to the values in §6 |
+
 Zapis import roundtrip: **out of scope**. Zapis is not in this repo, and its importer currently targets
-`/api/export` (§7). Expected count: 276 → 287.
+`/api/export` (§7). Count: 276 → 288 (12 tests in `tests/test_manifest.py`).
 
 ## 11. Version bump
 
