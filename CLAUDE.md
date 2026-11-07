@@ -682,3 +682,16 @@ Zapis compatibility: status values carried through unchanged.
   A session with no challenges → `{"challenges": [], "total": 0, "manifest_hash": "sha256:<sha256 of '[]'>"}`.
 - Read-only: never calls `manager.save()`, never mutates a challenge dict. Lives on `manifest_router`
   in `api/challenges.py`.
+
+## libmagic 5.46 zip detection
+- libmagic 5.46 (Ubuntu 26.04 / ubuntu-latest) puts its generic "Zip archive data" result under an
+  end-of-file test (`-22 string PK\005\006`). Negative offsets need a real file, so `magic_buffer()`
+  never matches them: through `from_buffer()` every zip (any size, stored or deflated) is
+  `data` / `application/octet-stream`. `file foo.zip` and `from_file()` are fine. 5.45 had no such gate.
+- `detect_file_type()` corrects exactly that miss: libmagic says `application/octet-stream` AND the
+  bytes start with `PK\x03\x04` (`ZIP_LOCAL_HEADER`) → `application/zip` ("Zip archive data" if the
+  description was `data`). Magic bytes only, never a filename; any specific libmagic answer is kept.
+- Known limit: on 5.46, OOXML (docx/xlsx) also comes back `data` via `from_buffer()`; with the
+  correction it reports `application/zip`, not the Office type.
+- Tests 283 → 286 (`tests/test_tools.py`: deflated multi-file zip + two version-independent tests
+  that simulate the 5.46 miss). CI back on `ubuntu-latest`.

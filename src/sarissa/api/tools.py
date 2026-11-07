@@ -47,13 +47,26 @@ def compute_hashes(data: bytes) -> dict[str, str]:
 
 MAGIC_HEADER_BYTES = 65536  # enough for deep signatures (tar @257, ISO9660 @32769)
 
+# Zip local file header signature. libmagic 5.46 nests its generic "Zip archive data"
+# result under an end-of-file test (`-22 string PK\005\006`, the End Of Central
+# Directory record). Negative offsets need a real file descriptor, so they never match
+# in magic_buffer() — every zip comes back "data" / application/octet-stream through
+# from_buffer(). 5.45 had no such gate. Correct only that exact miss, by magic bytes.
+ZIP_LOCAL_HEADER = b"PK\x03\x04"
+
 
 def detect_file_type(data: bytes) -> dict[str, Any]:
     """Identify content by magic bytes only. Deliberately takes no file name."""
     header = data[:MAGIC_HEADER_BYTES]
+    mime = magic.from_buffer(header, mime=True)
+    description = magic.from_buffer(header)
+    if mime == "application/octet-stream" and header.startswith(ZIP_LOCAL_HEADER):
+        mime = "application/zip"
+        if description == "data":
+            description = "Zip archive data"
     return {
-        "mime": magic.from_buffer(header, mime=True),
-        "description": magic.from_buffer(header),
+        "mime": mime,
+        "description": description,
         "magic_hex": data[:16].hex(" "),
         "size": len(data),
     }
