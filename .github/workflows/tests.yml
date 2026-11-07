@@ -11,8 +11,7 @@ permissions:
 jobs:
   test:
     name: pytest (Python 3.11)
-    # Pinned: ubuntu-26.04 (libmagic 5.46) detects the small zip test fixture as octet-stream.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout

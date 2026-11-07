@@ -32,7 +32,17 @@ def _zip_bytes():
     return buf.getvalue()
 
 
+def _deflated_multi_zip_bytes():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("notes.txt", "evidence " * 200)
+        zf.writestr("logs/auth.log", "Accepted password for root\n" * 100)
+        zf.writestr("flag.txt", "flag{deflate}")
+    return buf.getvalue()
+
+
 ZIP = _zip_bytes()
+ZIP_DEFLATED_MULTI = _deflated_multi_zip_bytes()
 ELF = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8 + b"\x02\x00\x3e\x00" + b"\x00" * 44
 
 ABC = {
@@ -98,10 +108,38 @@ def test_hash_endpoint_large_body(client):
 
 @pytest.mark.parametrize(
     "data,mime",
-    [(PNG, "image/png"), (PDF, "application/pdf"), (ZIP, "application/zip"), (b"hello world\n", "text/plain")],
+    [
+        (PNG, "image/png"),
+        (PDF, "application/pdf"),
+        (ZIP, "application/zip"),
+        (ZIP_DEFLATED_MULTI, "application/zip"),
+        (b"hello world\n", "text/plain"),
+    ],
 )
 def test_detect_by_magic(data, mime):
     assert detect_file_type(data)["mime"] == mime
+
+
+def _libmagic_says_data(monkeypatch):
+    """Simulate libmagic 5.46's from_buffer() miss on zips, on any libmagic version."""
+    monkeypatch.setattr(
+        tools.magic, "from_buffer",
+        lambda buf, mime=False: "application/octet-stream" if mime else "data",
+    )
+
+
+def test_detect_zip_when_libmagic_misses_it(monkeypatch):
+    _libmagic_says_data(monkeypatch)
+    result = detect_file_type(ZIP)
+    assert result["mime"] == "application/zip"
+    assert result["description"] == "Zip archive data"
+
+
+def test_zip_correction_is_not_a_blanket_override(monkeypatch):
+    _libmagic_says_data(monkeypatch)
+    result = detect_file_type(b"\x00\x01\x02\x03 not a zip")
+    assert result["mime"] == "application/octet-stream"
+    assert result["description"] == "data"
 
 
 def test_detect_elf():
