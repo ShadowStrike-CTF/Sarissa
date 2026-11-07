@@ -136,6 +136,7 @@ def create_app(sessions_dir: Path | None = None, allow: Iterable[str] = ()) -> F
     app.include_router(challenges.router)
     app.include_router(challenges.score_router)
     app.include_router(challenges.review_router)
+    app.include_router(challenges.manifest_router)
     app.include_router(tools.router)
     app.include_router(session.router)
     # F02: outermost layer (added last = checked first). Loopback Host headers only.

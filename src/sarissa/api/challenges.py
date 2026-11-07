@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from enum import Enum
 from typing import Any, Iterable
@@ -321,3 +323,30 @@ review_router = APIRouter(prefix="/api/review", tags=["challenges"])
 @review_router.get("")
 def session_review(manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
     return compute_review(_challenges(manager), utc_now())
+
+
+def compute_manifest(challenges: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Manifest export: id/name/status only, sorted by id, with a deterministic SHA-256.
+
+    The returned list is exactly the list that is hashed, so a consumer can re-hash it.
+    Only the three keys are copied — no other challenge field can leak into the manifest.
+    """
+    items = sorted(
+        ({"id": c["id"], "name": c["name"], "status": c["status"]} for c in challenges),
+        key=lambda c: c["id"],
+    )
+    canonical = json.dumps(items, sort_keys=True, separators=(",", ":"))
+    return {
+        "challenges": items,
+        "total": len(items),
+        "manifest_hash": "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
+
+
+# GET /api/manifest: read-only. No save, no mutation. 409 with no session (NoActiveSession).
+manifest_router = APIRouter(prefix="/api/manifest", tags=["challenges"])
+
+
+@manifest_router.get("")
+def session_manifest(manager: SessionManager = Depends(get_manager)) -> dict[str, Any]:
+    return compute_manifest(_challenges(manager))
