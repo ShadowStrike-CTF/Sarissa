@@ -652,3 +652,33 @@ WHAT NOT TO DO:
 Test suite: tests/conftest.py patches TestClient's default base_url to
 "http://127.0.0.1" to match the middleware. If tests fail with 400 Invalid host
 header, check base_url first.
+
+## GET /api/manifest — Manifest Export
+
+Endpoint: GET /api/manifest
+No authentication required (localhost tool, port 7331)
+
+Response schema:
+{
+  "challenges": [
+    {
+      "id": <string — challenge id as stored internally>,
+      "name": <string — challenge display name>,
+      "status": <string — "unsolved" | "in_progress" | "solved" (the Status enum in api/challenges.py)>
+    }
+  ],
+  "total": <int — len(challenges)>,
+  "manifest_hash": "sha256:<hex>"
+}
+
+manifest_hash: SHA-256 of json.dumps(challenges sorted by id,
+  sort_keys=True, separators=(',',':')).
+
+NO flag_hash — challenges do not store a flag field.
+Zapis compatibility: status values carried through unchanged.
+
+- `challenges` in the response is the same id-sorted list that is hashed, so a consumer can re-hash it.
+- No active session → 409 via the app-wide `NoActiveSession` handler (same as every session route).
+  A session with no challenges → `{"challenges": [], "total": 0, "manifest_hash": "sha256:<sha256 of '[]'>"}`.
+- Read-only: never calls `manager.save()`, never mutates a challenge dict. Lives on `manifest_router`
+  in `api/challenges.py`.
