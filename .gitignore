@@ -206,3 +206,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Design docs and SPECs — internal only, never committed
+docs/
+scratch/
+*_Design_Doc_*.md
+*_SPEC_*.md
+*_DRAFT.md
